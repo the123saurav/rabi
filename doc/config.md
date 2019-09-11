@@ -4,3 +4,4 @@ Below are the list of config params:
 * max_memtables
 * max_flushed_files - this cant be set by user.
 * min_orphaned_keys_during_compaction - cant be set.
+* max_L3_file_size - cant be set

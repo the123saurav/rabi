@@ -1,7 +1,8 @@
 This document describes the flow for Get operation.
 
 We first search in L<sub>0</sub>, then 
-L<sub>1</sub> files filtering on key range.
+L<sub>1</sub> files filtering on key range. Note that here we first look into main map and
+then also check deletedMap Set.
 Then we look into L<sub>2</sub> files index filtering on key range and
 finally L<sub>3</sub> files bloom filter.
 

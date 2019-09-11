@@ -14,5 +14,10 @@ Data file layout:
 - min_key
 - max_key
 - num_keys
+- deleted_keys
+
+Note that we dont write anything at first 8 bytes.
+This is because the tombstone offset in index is set to point to 0 offset.
+
 
 

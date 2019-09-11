@@ -11,6 +11,7 @@ class L0{
     private byte[] minKey; //this will be used in  L1 for filtering out reads
     private byte[] maxKey;
     private long walEndOffset; //for checkpointing
+    private Set<ByteArrayWrapper> deleted;
 }
 ```
 
