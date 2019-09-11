@@ -1,0 +1,37 @@
+This doc details about the compaction process.
+
+Compaction kicks in when:
+* Number of files crosses max_flushed_files(3) files. This is not configurable.
+* Disk has enough space for running compaction:
+  We decide it by:
+  - Free space in partition > 1.1 * size of candidate_file.
+  - More than 20% Free inodes. 
+  else we crash.
+During compaction:
+```    
+    candidate = highest_density_file(by just reading num_keys and range only)
+    if no_files_at_L3:
+        bring candidate down
+    else:
+        load candidate file in memory
+        find the target files where we would append.
+        for all target files, create batched IO writes.
+        for all target file:
+            Read the target files index file in memory HashMap.
+            Dont Grow the target file first(not holes but actually grow) as that OOS or OOIN issues surfaces here. But if we grow and fail before writing, we would be in bad state after restart.
+            start appending data to Data section of file in a loop with checks(We can go out of disk here, leaving us in inconsistent state, so perhaps check disk space again here and inodes before each batched write)
+            update the im-memory HashMap for target file(its OK if we failed here)
+            Touch a new temporary index file writing the range first and then Write the hashMap to index file with timestamp and then mv the new one to old one.(Its OK if we fail as we would have OLD index file, mv is atomic operation)
+        if some keys are left which dont fall to any target file, then:     
+            if num_keys > min_orphaned_keys_during_compaction:
+                create new file in L3
+            else:
+                merge into existing same as above(batched writes) but also updating in-memory index files' range.
+                To find the target files, we use the nearest neighbour approach to find closest file.
+        unlink the candidate file(its OK if we faile here)
+        
+Note: since we are just appending data, its OK to fail midway 
+      as all it means is putting redundant data. This would be taken 
+      care of during rebalancing.    
+```    
+        

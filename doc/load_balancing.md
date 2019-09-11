@@ -1,0 +1,1 @@
+An L3 file can be smaller in size than L2(because of orphaned keys during compaction)
