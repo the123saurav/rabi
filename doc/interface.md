@@ -5,8 +5,10 @@ The constructor allows passing a Config.
 #Start
 
 `Future/CompletableFuture Start()`
-bootstraps the DB loading indices of L<sub>2</sub> 
-and bloom filter of L<sub>3</sub>.
+- cleans all temp files.
+- constructs memtable from WAL.
+- bootstraps the DB loading indices of L<sub>2</sub> 
+- bloom filter of L<sub>3</sub>.
 There is no timeout here.
 
 #Get
@@ -20,12 +22,18 @@ Gets the value associated with the key.
 `Put(byte[] key, byte[] value)`
 
 This is an idempotent operation.
+Write to WAL(source of truth).
+Delete if entry in deleted section of map.
+Put to data section of map.
 
 #Delete
 
 `Delete(byte[] key)`
 
 This is an idempotent operation.
+Write to WAL(source of truth).
+Create an entry in deleted secion of memtable.
+Delete if present from memtable.
 
 #Stop
 

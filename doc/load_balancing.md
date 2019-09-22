@@ -27,4 +27,4 @@ There are 2 types of load balancing:
    So its like not having an entry is same as having a tombstone.
    It definitely is taking disk space but if it grows then we will
    reclaim the disk space during partitioning.
-   So right now, we are not implementing rebalancing.
+   So right now, we are not implementing merging???

@@ -9,7 +9,7 @@ Compaction kicks in when:
   else we crash.
 During compaction:
 ```    
-    candidate = highest_density_file(by just reading num_keys and range only)
+    candidate = highest_density_file(by just reading num_keys and range only from index file)
     if no_files_at_L3:
         bring candidate down
     else:

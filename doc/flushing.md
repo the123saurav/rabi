@@ -14,7 +14,7 @@ At flush, we:
 - for k, v in memtable: 
     - construct the record format and get the next offset. 
     - add to batch for IO
-    - add an entry to indexMap with offset constructed OR null(tombstone)
+    - add an entry to indexMap with offset constructed OR 0(tombstone)
     - if batch size reached:
             - flush to disk
 - flush index to file along with range            
