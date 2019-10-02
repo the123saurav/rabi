@@ -1,6 +1,6 @@
 import java.util.Map;
 
-class L0 {
+class MemTable {
 
 }
 

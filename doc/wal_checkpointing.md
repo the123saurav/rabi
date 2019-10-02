@@ -4,7 +4,9 @@ construct only mutable memtable.
 Note that if we crashed because of OOM then resconstructing memtable from WAL at restart
 will keep crashing, hence we can stall writes at 2 condition:
 - max_memtables
-- memory available is less
+- memory available is less(triggers flushing if not already)
+- max_L2_files reached (compaction is slower than rate at which flushing is taking place)
+
 
 Note that before flushing you might have had max_memtables + 1
 memtables but at bootstrap we construct all memtable(note that the checkpint is lost as thats stored in memory but we can rely on memory size) and flush it.
@@ -14,7 +16,10 @@ It doesn't matter as total memory is same.
 
 At regular operation/bootstrap
 push the oldest memtable to disk
-and persist checkpoint pointer of WAL.
+and persist checkpoint pointer of WAL. Note that
+there could be 2 WALs at the same time, hence each memtable keeps a
+file object for WAL.
+If we find that the WAL offset has reached end, we unlink the WAL file.
 How to make this atomic??? 
 If we cant make it atomic, then at worse we would
 have duplicate data which is okay as that is like a

@@ -28,7 +28,6 @@ During compaction:
               Note that the data can be a tombstone in which case we just write to index and not data section.(if v == null)
             - update the memory HashMap for target file(its OK if we failed here) with the offset OR tombstone. IF its tombstone update num_deleted_entry
             - Touch a new temporary index file writing the range first and then Write the hashMap to index file with timestamp and then mv the new one to old one.(Its OK if we fail as we would have OLD index file, mv is atomic operation)
-            - if num_deleted is huge, invalidate bloom filter.
         if some keys are left which dont fall to any target file, then:     
             if num_keys > min_orphaned_keys_during_compaction:
                 create new file in L3
@@ -36,6 +35,7 @@ During compaction:
                 merge into existing same as above(batched writes) but also updating in-memory index files' range.
                 To find the target files, we use the nearest neighbour approach to find closest file.
         unlink the candidate file(its OK if we faile here)
+        recreate bloom filter if there were deletes.
         
 Note: since we are just appending data, its OK to fail midway 
       as all it means is putting redundant data. This would be taken 

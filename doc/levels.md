@@ -5,12 +5,15 @@ There are `4` levels in our tree:
 * This is the mutable memory resident Hashmap from CustomByteArray to byte[].
 
 It has below definition:
+Each memtable is backed by WAL which is known to it at creation time.
+The WAL offset is set by Put if it finds WAL is full.
 ```java
-class L0{
+class MemTable{
     private Map<ByteArrayWrapper, byte[]> m;
     private byte[] minKey; //this will be used in  L1 for filtering out reads
     private byte[] maxKey;
     private long walEndOffset; //for checkpointing
+    private File wal; //there could be 2 WALs, so we need to know which to checkpoint.
     private Set<ByteArrayWrapper> deleted;
 }
 ```

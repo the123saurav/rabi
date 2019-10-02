@@ -1,5 +1,5 @@
 The following files are kept in memory:
-* L0
+* MemTable
 * L1
 * L2 indices
 * L3 bloom filter

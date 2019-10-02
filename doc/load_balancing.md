@@ -16,7 +16,8 @@ There are 2 types of load balancing:
                 - write the key and new offset in temp1/2 index.
         append the batch to temp1/2
    - flush the temp1/2 index file.  
-   - mv the new temp files as new data file and unlink old one.   
+   - mv the new temp files as new data file and unlink old one.
+   - recreate bloom filter and do atomic flip.   
    ANY failue is OK as the files are temp ones and unlinked on start.
    
 2. Merging:   

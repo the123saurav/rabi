@@ -3,8 +3,8 @@ disk when number of files reaches a threshold OR there
 is danger of running OOM.
 
 At flush, we:
-* write memtable to file.
-* checkpoint and update the wal pointer.
+* write memtable to file(failure here is OK as we create temp/duplicate files at max)
+* checkpoint and update the wal pointer(failure is OK as all we will have is duplicate L2 files)
 * check if WAL needs to be rotated.
 
 
