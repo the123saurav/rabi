@@ -1,5 +1,5 @@
 The following files are kept in memory:
-* MemTable
+* com.rabi.memtable.MemTable
 * L1
 * L2 indices
 * L3 bloom filter

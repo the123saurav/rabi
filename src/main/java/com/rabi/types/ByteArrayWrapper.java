@@ -1,6 +1,8 @@
+package com.rabi.types;
+
 import java.util.Arrays;
 
-final class ByteArrayWrapper
+public final class ByteArrayWrapper
 {
     private final byte[] data;
 
