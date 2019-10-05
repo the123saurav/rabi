@@ -8,11 +8,11 @@ public class Snapshot<T> extends Base {
         super(name);
     }
 
-    public void set(T v){
+    public void set(T v) {
         val = v;
     }
 
-    public T get(){
+    public T get() {
         return val;
     }
 }

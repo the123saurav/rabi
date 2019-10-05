@@ -11,7 +11,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * A singleton class with all Stats. Note that some stats may be costly and can be truned off in Config.
+ * A singleton class with all Stats. Note that some stats may be costly
+ * and can be truned off in Config.
  * DB has an instance of this.
  * - num_immutable_memtables
  * - mutable_memtable_size
@@ -36,8 +37,8 @@ import java.util.Map;
  * The stats are set by DB instance upon events.
  * This can happen via a system wide event queue OR a pub-sub mechanism.
  */
-
-class Stats {
+//TODO think if we need this public
+public final class Stats {
 
     //maybe use counters, snapshot classes
     private Snapshot<Integer> numImmutableMemtables;
@@ -62,7 +63,7 @@ class Stats {
     private Logger log;
 
     //No need to ensure singleton as this is not public class.
-    Stats(Logger logger) {
+    public Stats(Logger logger) {
         log = logger;
     }
 

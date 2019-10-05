@@ -4,7 +4,7 @@ class Base {
 
     private String name;
 
-    Base(String name){
-        this.name = name;
+    Base(String n) {
+        this.name = n;
     }
 }
