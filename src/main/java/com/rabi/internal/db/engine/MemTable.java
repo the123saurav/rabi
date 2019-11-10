@@ -12,4 +12,5 @@ public interface MemTable extends Loadable {
 
     void disallowMutation();
 
+    void close() throws IOException;
 }

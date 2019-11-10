@@ -27,7 +27,7 @@ public class FileCleanupTask extends BaseTask {
         try {
             Files.delete(file);
         } catch (IOException e) {
-            throw new InitialisationException("Unable to clean file: " + file + "\n" + e.getMessage());
+            throw new InitialisationException("Unable to clean file: " + file + "\n" + e.getMessage(), e);
         }
     }
 }

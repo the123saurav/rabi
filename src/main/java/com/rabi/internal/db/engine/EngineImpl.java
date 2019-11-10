@@ -3,6 +3,7 @@ package com.rabi.internal.db.engine;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.rabi.Config;
 import com.rabi.exceptions.InitialisationException;
+import com.rabi.exceptions.InvalidDBStateException;
 import com.rabi.exceptions.WritesStalledException;
 import com.rabi.internal.db.Engine;
 import com.rabi.internal.db.engine.filter.FilterImpl;
@@ -25,7 +26,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -71,7 +73,7 @@ public class EngineImpl implements Engine {
      * Note that only 1,2,3,4 are in purview of parallelism.
      */
     @Override
-    public void start() {
+    public synchronized void start() {
         log.info("starting DB engine");
         this.state = State.BOOTING;
 
@@ -79,7 +81,7 @@ public class EngineImpl implements Engine {
         try {
             Files.createDirectories(dataDir);
         } catch (IOException e) {
-            throw new InitialisationException(e.toString());
+            throw new InitialisationException(e);
         }
 
         Function<Path, FileType> fileTypeMapper = p -> {
@@ -106,13 +108,13 @@ public class EngineImpl implements Engine {
 
         } catch (IOException e) {
             //no need to cleanup
-            throw new InitialisationException(e.getMessage());
+            throw new InitialisationException(e);
         }
 
         List<BaseTask> tasks = getTasks(fileMap);
 
         log.debug(tasks + " tasks to load at boot.");
-        if(tasks.size() > 0) {
+        if (tasks.size() > 0) {
 
             int parallelism = cfg.getBootParallelism();
             boolean errInInit = false;
@@ -144,13 +146,13 @@ public class EngineImpl implements Engine {
                         t.run();
                     } catch (Exception e) {
                         e.printStackTrace();
-                        throw new InitialisationException(e.toString());
+                        throw new InitialisationException(e);
                     }
                 });
             }
         }
         //if there is even a single WAL, mutableTable is set
-        if(mutableTable == null) {
+        if (mutableTable == null) {
             log.debug("setting mutable memtable");
             mutableTable = newTable(Instant.now().toEpochMilli());
             mutableTable.load();
@@ -164,7 +166,7 @@ public class EngineImpl implements Engine {
 
     /**
      * Threadsafe
-     *
+     * <p>
      * will keep crashing, hence we can stall writes at below conditions:
      * - max_memtables
      * - memory available is less(triggers flushing if not already)
@@ -172,31 +174,27 @@ public class EngineImpl implements Engine {
      *
      * @return
      */
-    private boolean writesStalled(){
-        if(immutableTables.size() >= cfg.getMaxMemtables() || l2Indexes.size() >= cfg.getMaxFlushedFiles()){
-            return true;
-        }
-        return false;
+    private boolean writesStalled() {
+        return immutableTables.size() >= cfg.getMaxMemtables() || l2Indexes.size() >= cfg.getMaxFlushedFiles();
     }
 
     /**
-     *
-     *     in call to put, check writes stalled or not.
-     *     if not stalled:
-     *         insert into table.
-     *         if(size full){
-     *             tryLock();
-     *             //for 1st guy, go and create new table, others can exit knowing someone is there,
-     *             even if below fails, someone will detect size full and start again
-     *             if lock succeeds:
-     *                 // create new memtable with numsegemnts from cfg.
-     *                 // get curr memtable
-     *                 // update curr memtable
-     *                 // put curr to immutable(dont disallowmutation yet OR close wal for writes, we do it during flushing)
-     *                 // is there a way for us to decide if all writes would
-     *                 // now see new table only, maybe if this table is non writable, reread ref and retry.
-     *
-     *         }
+     * in call to put, check writes stalled or not.
+     * if not stalled:
+     * insert into table.
+     * if(size full){
+     * tryLock();
+     * //for 1st guy, go and create new table, others can exit knowing someone is there,
+     * even if below fails, someone will detect size full and start again
+     * if lock succeeds:
+     * // create new memtable with numsegemnts from cfg.
+     * // get curr memtable
+     * // update curr memtable
+     * // put curr to immutable(dont disallowmutation yet OR close wal for writes, we do it during flushing)
+     * // is there a way for us to decide if all writes would
+     * // now see new table only, maybe if this table is non writable, reread ref and retry.
+     * <p>
+     * }
      *
      * @param k - key
      * @param v - value
@@ -204,7 +202,10 @@ public class EngineImpl implements Engine {
      */
     @Override
     public void put(byte[] k, byte[] v) throws IOException {
-        if(writesStalled()){
+        if (state == State.TERMINATED || state == State.TERMINATING) {
+            throw new InvalidDBStateException("Terminated");
+        }
+        if (writesStalled()) {
             throw new WritesStalledException();
         }
 
@@ -221,16 +222,24 @@ public class EngineImpl implements Engine {
      * - set state to TERMINATING to disallow any ops.
      * - release file locks if any.
      * - flush WAL segments(if sync is off) and close write channel(to prevent corruption,
-     *   we are doing it here)
+     * we are doing it here)
      * - if mode == GRACEFUL:
-     *      - invoke flushing routine to write to disk(data and index file) and
-     *        rename WAL file for immutable memtables.
-     *      - no need to flush mutable memTable.
+     * - invoke flushing routine to write to disk(data and index file) and
+     * rename WAL file for immutable memtables.
+     * - no need to flush mutable memTable.
      * - set state == TERMINATED.
      */
     @Override
-    public void shutdown(){
+    public synchronized void shutdown() throws IOException {
+        if (state == State.TERMINATED) {
+            return;
+        }
+        state = State.TERMINATING; //marker that somebody invoked shutdown
+        mutableTable.close();
+        if (cfg.getShutdownMode() == Config.ShutdownMode.GRACEFUL) {
 
+        }
+        state = State.TERMINATED;
     }
 
     private List<BaseTask> getTasks(Map<FileType, List<Path>> m) {
@@ -278,9 +287,9 @@ public class EngineImpl implements Engine {
         walToSegments.forEach((ts, p) -> {
             MemTable m = newTable(ts, p.size());
             tasks.add(new LoadableTask(m, log));
-            if(highestTS == ts){
+            if (highestTS == ts) {
                 mutableTable = m;
-            }else {
+            } else {
                 immutableTables.add(m);
             }
         });
@@ -314,7 +323,4 @@ public class EngineImpl implements Engine {
             return new LoadableTask(f, log);
         }).collect(Collectors.toList());
     }
-
-
-
 }

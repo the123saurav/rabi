@@ -35,7 +35,7 @@ public class Segment {
 
     public Segment(Path p, boolean s, Logger logger) {
         path = p;
-        log  = logger;
+        log = logger;
         sync = s;
     }
 
@@ -44,7 +44,7 @@ public class Segment {
 
         //read entries
         if (Files.exists(path)) {
-            try(FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
+            try (FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
                 ByteBuffer loadBuffer = ByteBuffer.allocateDirect(LOAD_SIZE_BYTES);
                 Entry e;
                 long lastPos;
@@ -76,9 +76,9 @@ public class Segment {
 
     public void makeWritable() throws IOException {
         log.debug("making segment: " + path.getFileName() + " writable");
-        if(sync) {
+        if (sync) {
             writer = FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.DSYNC);
-        }else {
+        } else {
             writer = FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         }
     }
@@ -112,5 +112,13 @@ public class Segment {
     void appendDelete(byte[] k) throws IOException {
         Entry e = new Entry(k, Instant.now().toEpochMilli());
         writer.write(e.serialize());
+    }
+
+    void close() throws IOException {
+        if (!sync) {
+            writer.force(true);
+        }
+
+        writer.close(); //idempotent
     }
 }

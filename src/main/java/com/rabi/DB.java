@@ -12,7 +12,7 @@ public interface DB {
      * @param cfg Config for rabi, this can be set only once.
      * @return a future whose completion with 'true' indicates DB is ready.
      */
-    CompletableFuture<Void> open(Config cfg) throws InterruptedException;
+    CompletableFuture<Void> open(Config cfg);
 
     /**
      * @param k key to get value for.
@@ -26,7 +26,7 @@ public interface DB {
      *
      * @param k key should be less than 256 bytes
      * @param v value
-     * throws InvalidDBStateException if DB is not running.
+     * @throws IOException
      */
     void put(byte[] k, byte[] v) throws IOException;
 
@@ -45,8 +45,7 @@ public interface DB {
      * can wait on for clean exit.
      *
      * @return future wrapping status indicating success.
+     * @throws RuntimeException
      */
-    CompletableFuture<Boolean> stop();
-
-
+    CompletableFuture<Void> stop();
 }

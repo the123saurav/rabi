@@ -82,7 +82,7 @@ public class IndexImpl implements Index {
             loadHeader(ch);
             loadEntries(ch);
         } catch (IOException e) {
-            throw new InitialisationException("Error in loading index file: " + path + e.getMessage());
+            throw new InitialisationException("Error in loading index file: " + path + e.getMessage(), e);
         }
     }
 

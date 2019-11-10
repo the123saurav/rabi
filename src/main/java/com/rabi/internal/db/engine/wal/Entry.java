@@ -53,6 +53,7 @@ public class Entry implements Comparable<Entry> {
     /**
      * Although we are returning mutable ref,
      * but its used internally by MemtableImpl only.
+     *
      * @return
      */
     public byte[] getKey() {
@@ -62,6 +63,7 @@ public class Entry implements Comparable<Entry> {
     /**
      * Although we are returning mutable ref,
      * but its used internally by MemtableImpl only.
+     *
      * @return
      */
     public byte[] getVal() {
@@ -76,6 +78,7 @@ public class Entry implements Comparable<Entry> {
      * Note this returns 0 too which violates
      * the .equals inherited that is because the ordering
      * is explicitly defined and should take precedence.
+     *
      * @param o
      * @return
      */

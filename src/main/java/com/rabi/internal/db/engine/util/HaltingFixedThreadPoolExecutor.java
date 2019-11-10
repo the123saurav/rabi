@@ -34,13 +34,13 @@ public class HaltingFixedThreadPoolExecutor extends ThreadPoolExecutor {
           }*/
         if (t != null) {
             didErr = true;
-            if(!isTerminating()) {
+            if (!isTerminating()) {
                 shutdown();
             }
         }
     }
 
-    public boolean didWeErr(){
+    public boolean didWeErr() {
         return didErr;
     }
 }

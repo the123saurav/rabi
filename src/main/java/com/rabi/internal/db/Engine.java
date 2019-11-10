@@ -13,5 +13,5 @@ public interface Engine {
 
     void delete(byte[] k);
 
-    void shutdown();
+    void shutdown() throws IOException;
 }

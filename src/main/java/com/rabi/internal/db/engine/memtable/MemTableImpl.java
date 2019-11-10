@@ -6,7 +6,6 @@ import com.rabi.internal.db.engine.Wal;
 import com.rabi.internal.db.engine.wal.Entry;
 import com.rabi.internal.types.ByteArrayWrapper;
 import org.slf4j.Logger;
-import sun.rmi.runtime.Log;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -58,7 +57,7 @@ public class MemTableImpl implements MemTable {
         try {
             entries = wal.load();
         } catch (IOException e) {
-            throw new InitialisationException(e.getMessage());
+            throw new InitialisationException(e);
         }
         //now order entries as per vtime.
         entries.sort(null);
@@ -100,12 +99,14 @@ public class MemTableImpl implements MemTable {
         mutable = false;
     }
 
+    @Override
     public void put(byte[] k, byte[] v) throws IOException {
         long vtime = wal.appendPut(k, v);
         ByteArrayWrapper b = new ByteArrayWrapper(k);
         put(b, v, vtime);
     }
 
+    @Override
     public void delete(byte[] k) throws IOException {
         long vtime = wal.appendDelete(k);
         ByteArrayWrapper b = new ByteArrayWrapper(k);
@@ -119,6 +120,11 @@ public class MemTableImpl implements MemTable {
         if(curr == null || vtime > curr.vTime){
             m.put(b, new Value(v, vtime));
         }*/
+    }
+
+    @Override
+    public void close() throws IOException {
+        wal.close();
     }
 }
 

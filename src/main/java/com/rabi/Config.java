@@ -7,7 +7,7 @@ import com.rabi.exceptions.BadConfigException;
  */
 public final class Config implements Cloneable {
 
-    public enum ShutdownMode{
+    public enum ShutdownMode {
         GRACEFUL, FAST
     }
 
@@ -37,19 +37,29 @@ public final class Config implements Cloneable {
         this.shutdownMode = shutdownMode;
     }
 
-    public short getBootParallelism() { return bootParallelism; }
+    public short getBootParallelism() {
+        return bootParallelism;
+    }
 
-    public int getMaxMemtables() { return maxMemtables; }
+    public int getMaxMemtables() {
+        return maxMemtables;
+    }
 
-    public int getMaxFlushedFiles() { return maxFlushedFiles; }
+    public int getMaxFlushedFiles() {
+        return maxFlushedFiles;
+    }
 
     public short getMemtableSegments() {
         return memtableSegments;
     }
 
-    public boolean getSync() { return sync; }
+    public boolean getSync() {
+        return sync;
+    }
 
-    public ShutdownMode getShutdownMode() { return shutdownMode; }
+    public ShutdownMode getShutdownMode() {
+        return shutdownMode;
+    }
 
     @Override
     public String toString() {
@@ -105,12 +115,12 @@ public final class Config implements Cloneable {
             return this;
         }
 
-        public ConfigBuilder setSync(boolean s){
+        public ConfigBuilder setSync(boolean s) {
             sync = s;
             return this;
         }
 
-        public ConfigBuilder setShutdownMode(ShutdownMode s){
+        public ConfigBuilder setShutdownMode(ShutdownMode s) {
             shutdownMode = s;
             return this;
         }

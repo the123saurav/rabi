@@ -3,6 +3,8 @@ package com.rabi.internal.db;
 import com.rabi.Config;
 import com.rabi.DB;
 import com.rabi.exceptions.DBUinitializedException;
+import com.rabi.exceptions.ShutdownException;
+import com.rabi.exceptions.UnexpectedException;
 import com.rabi.internal.db.engine.EngineImpl;
 import org.slf4j.Logger;
 
@@ -49,22 +51,19 @@ public final class DBImpl implements DB {
      * @return a future whose completion indicates DB is ready for query.
      */
     @Override
-    public CompletableFuture<Void> open(Config c) throws InterruptedException {
-        Config cfg = null;
-        try {
-            cfg = (Config) c.clone();
-        } catch (CloneNotSupportedException e) {
-        }
+    public synchronized CompletableFuture<Void> open(Config c) {
         if (engine != null) {
             return CompletableFuture.completedFuture(null);
         }
-        synchronized (DBImpl.class) {
-            if (engine != null) {
-                return CompletableFuture.completedFuture(null);
-            }
-            engine = new EngineImpl(this.dataDir, cfg, this.log);
-            return CompletableFuture.runAsync(engine::start);
+        Config cfg;
+        try {
+            cfg = (Config) c.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new UnexpectedException(e.toString());
         }
+
+        engine = new EngineImpl(this.dataDir, cfg, this.log);
+        return CompletableFuture.runAsync(engine::start);
     }
 
     @Override
@@ -78,7 +77,7 @@ public final class DBImpl implements DB {
     }
 
     @Override
-    public void  put(byte[] k, byte[] v) throws IOException {
+    public void put(byte[] k, byte[] v) throws IOException {
         if (engine == null) {
             throw uninitializedError;
         }
@@ -94,11 +93,16 @@ public final class DBImpl implements DB {
     }
 
     @Override
-    public CompletableFuture<Boolean> stop() {
+    public synchronized CompletableFuture<Void> stop() {
         if (engine == null) {
-            return CompletableFuture.completedFuture(true);
+            return CompletableFuture.completedFuture(null);
         }
-        //delegate to engine
-        return null;
+        return CompletableFuture.runAsync(() -> {
+            try {
+                engine.shutdown();
+            } catch (Exception e) {
+                throw new ShutdownException(e);
+            }
+        });
     }
 }

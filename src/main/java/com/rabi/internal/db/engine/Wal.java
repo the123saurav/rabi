@@ -51,4 +51,10 @@ public interface Wal {
      * @return last Offset
      */
     long getLastOffset();
+
+    /**
+     * Closes WAL
+     * This causes sync to disk device.
+     */
+    void close() throws IOException;
 }

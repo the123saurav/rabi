@@ -50,7 +50,7 @@ public class WalImpl implements Wal {
             try {
                 entries.addAll(s.load());
             } catch (IOException e) {
-                throw new InitialisationException(e.toString());
+                throw new InitialisationException(e);
             }
         }
         return entries;
@@ -91,5 +91,12 @@ public class WalImpl implements Wal {
     @Override
     public long getLastOffset() {
         return 0;
+    }
+
+    @Override
+    public void close() throws IOException {
+        for (Segment segment : segments) {
+            segment.close();
+        }
     }
 }

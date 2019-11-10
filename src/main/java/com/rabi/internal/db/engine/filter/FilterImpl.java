@@ -73,7 +73,7 @@ public class FilterImpl implements Filter {
                     Funnels.byteArrayFunnel(), numKeys, 0.01);
             loadEntries(ch);
         } catch (IOException e) {
-            throw new InitialisationException("Error in loading index file: " + path + e.getMessage());
+            throw new InitialisationException("Error in loading index file: " + path + e.getMessage(), e);
         }
     }
 
