@@ -4,6 +4,9 @@ A LSM based key value database in Java
 
 # Project Status
 I have just finalised the API and design. Implementation is going on.
+At the moment:
+- Basic version of PUT is working.
+- Boot is working.
 
 # Building project
 This project uses maven for builds. 
