@@ -19,7 +19,7 @@ public final class Config implements Cloneable {
 
     private static final int maxL3FileSizeMB = 1000;
 
-    private final int memtableMaxSizeMB;
+    private final long memtableMaxKeys;
 
     private final short memtableSegments;
 
@@ -29,8 +29,8 @@ public final class Config implements Cloneable {
 
     private final ShutdownMode shutdownMode;
 
-    private Config(int memMax, short parallelism, short memtableSegments, boolean sync, ShutdownMode shutdownMode) {
-        this.memtableMaxSizeMB = memMax;
+    private Config(long memMax, short parallelism, short memtableSegments, boolean sync, ShutdownMode shutdownMode) {
+        this.memtableMaxKeys = memMax;
         this.bootParallelism = parallelism;
         this.memtableSegments = memtableSegments;
         this.sync = sync;
@@ -43,6 +43,10 @@ public final class Config implements Cloneable {
 
     public int getMaxMemtables() {
         return maxMemtables;
+    }
+
+    public long getMemtableMaxKeys() {
+        return memtableMaxKeys;
     }
 
     public int getMaxFlushedFiles() {
@@ -63,14 +67,14 @@ public final class Config implements Cloneable {
 
     @Override
     public String toString() {
-        return String.format("Config{%nmemtableMaxSizeMB: %d,%n"
+        return String.format("Config{%nmemtableMaxKeys: %d,%n"
                         + "maxMemtables: %d,%n"
                         + "maxFlushedFiles: %d,%n"
                         + "minOrphanedKeysDuringCompaction: %d,%n"
                         + "bootParallelism: %s,%n"
                         + "memtableSegments: %s,%n"
                         + "maxL3FileSizeMB: %d%n}",
-                memtableMaxSizeMB, maxMemtables, maxFlushedFiles,
+                memtableMaxKeys, maxMemtables, maxFlushedFiles,
                 minOrphanedKeysDuringCompaction, bootParallelism, memtableSegments,
                 maxL3FileSizeMB);
     }
@@ -82,25 +86,25 @@ public final class Config implements Cloneable {
 
     public static final class ConfigBuilder {
 
-        private static final int DEFAULT_MEMTABLE_MAX_SIZE_MB = 50;
+        private static final long DEFAULT_MEMTABLE_MAX_KEYS = 100000;
         private static final short DEFAULT_BOOT_PARALLELISM = 1;
         private static final int MAX_MEMTABLE_SEGMENTS = 16;
         private static final int DEFAULT_MEMTABLE_SEGMENTS = 4;
-        private static final int MEMTABLE_MINIMUM_MAX_SIZE_MB = 50;
+        private static final int MEMTABLE_MINIMUM_MAX_KEYS = 100000;
         private static final boolean DEFAULT_FILE_SYNC = false;
         private static final ShutdownMode DEFAULT_SHUTDOWN_MODE = ShutdownMode.GRACEFUL;
 
-        private static final String MEMTABLE_MAX_SIZE_ERR_STRING = "memtableMaxSizeMB should be atleast " + MEMTABLE_MINIMUM_MAX_SIZE_MB;
+        private static final String MEMTABLE_MAX_KEYS_ERR_STRING = "memtableMaxKeys should be atleast " + MEMTABLE_MINIMUM_MAX_KEYS;
         private static final String MEMTABLE_MAX_SEGMENTS_ERR_STRING = "memtableMaxSegments should be less than " + MAX_MEMTABLE_SEGMENTS;
 
-        private int memtableMaxSizeMB = DEFAULT_MEMTABLE_MAX_SIZE_MB;
+        private long memtableMaxKeys = DEFAULT_MEMTABLE_MAX_KEYS;
         private short memtableSegments = DEFAULT_MEMTABLE_SEGMENTS;
         private short bootParallelism = DEFAULT_BOOT_PARALLELISM;
         private boolean sync = DEFAULT_FILE_SYNC;
         private ShutdownMode shutdownMode = DEFAULT_SHUTDOWN_MODE;
 
-        public ConfigBuilder setMemtableMaxSize(int m) {
-            memtableMaxSizeMB = m;
+        public ConfigBuilder setMemtableMaxKeys(long m) {
+            memtableMaxKeys = m;
             return this;
         }
 
@@ -126,13 +130,13 @@ public final class Config implements Cloneable {
         }
 
         public Config build() {
-            if (memtableMaxSizeMB < MEMTABLE_MINIMUM_MAX_SIZE_MB) {
-                throw new BadConfigException(MEMTABLE_MAX_SIZE_ERR_STRING);
+            if (memtableMaxKeys < MEMTABLE_MINIMUM_MAX_KEYS) {
+                throw new BadConfigException(MEMTABLE_MAX_KEYS_ERR_STRING);
             }
             if (memtableSegments > MAX_MEMTABLE_SEGMENTS) {
                 throw new BadConfigException(MEMTABLE_MAX_SEGMENTS_ERR_STRING);
             }
-            return new Config(memtableMaxSizeMB, bootParallelism, memtableSegments, sync, shutdownMode);
+            return new Config(memtableMaxKeys, bootParallelism, memtableSegments, sync, shutdownMode);
         }
     }
 }

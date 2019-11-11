@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -47,10 +48,13 @@ public class EngineImpl implements Engine {
     private final Path dataDir;
     private final Config cfg;
     private final Logger log;
+    private final long maxKeys;
+
     private volatile State state;
+    private final ReentrantLock mutLock;
 
     private ConcurrentLinkedDeque<MemTable> immutableTables = new ConcurrentLinkedDeque<>();
-    private MemTable mutableTable; //created on first put
+    private volatile MemTable mutableTable;
     private List<Index> l2Indexes = new ArrayList<>();
     private List<Filter> l3Filters = new ArrayList<>();
 
@@ -59,6 +63,9 @@ public class EngineImpl implements Engine {
         this.cfg = cfg;
         this.log = logger;
         this.state = State.INITIALZED;
+        this.maxKeys = cfg.getMemtableMaxKeys();
+        this.mutLock = new ReentrantLock();
+        logger.debug("memtable max keys: " + this.maxKeys);
     }
 
     /**
@@ -77,7 +84,7 @@ public class EngineImpl implements Engine {
         log.info("starting DB engine");
         this.state = State.BOOTING;
 
-        //create dir if not exist
+        //create data dir if not exist
         try {
             Files.createDirectories(dataDir);
         } catch (IOException e) {
@@ -115,16 +122,8 @@ public class EngineImpl implements Engine {
 
         log.debug(tasks + " tasks to load at boot.");
         if (tasks.size() > 0) {
-
             int parallelism = cfg.getBootParallelism();
             boolean errInInit = false;
-        /*
-        If we throw any error here, we should
-        initiate engine shutdown. Make sure to
-        - close files
-        - release file lock
-        - GC memory
-         */
             if (parallelism > 1) {
                 HaltingFixedThreadPoolExecutor ex = new HaltingFixedThreadPoolExecutor(parallelism,
                         new ThreadFactoryBuilder().setDaemon(true).
@@ -209,12 +208,41 @@ public class EngineImpl implements Engine {
             throw new WritesStalledException();
         }
 
+        //TODO: maybe check if mutation disallowed exception and retry
         mutableTable.put(k, v);
+        if (mutableTable.size() > maxKeys && mutLock.tryLock()) {
+            log.info("memtable full, rotating.");
+            MemTable newTable = newTable(Instant.now().toEpochMilli());
+            newTable.load(); //creates segments
+            immutableTables.add(mutableTable);
+            mutableTable = newTable;
+            mutLock.unlock();
+        }
     }
 
     @Override
-    public void delete(byte[] k) {
+    public void delete(byte[] k) throws IOException {
+        if (state == State.TERMINATED || state == State.TERMINATING) {
+            throw new InvalidDBStateException("Terminated");
+        }
+        if (writesStalled()) {
+            throw new WritesStalledException();
+        }
 
+        //TODO: maybe check if mutation disallowed exception and retry
+        mutableTable.delete(k);
+        if (mutableTable.size() > maxKeys) {
+            if (mutLock.tryLock()) {
+                if (mutableTable.size() > maxKeys) {
+                    log.debug("memtable full, rotating.");
+                    MemTable newTable = newTable(Instant.now().toEpochMilli());
+                    newTable.load(); //creates segments
+                    immutableTables.add(mutableTable);
+                    mutableTable = newTable;
+                }
+                mutLock.unlock();
+            }
+        }
     }
 
     /**
@@ -288,6 +316,7 @@ public class EngineImpl implements Engine {
             MemTable m = newTable(ts, p.size());
             tasks.add(new LoadableTask(m, log));
             if (highestTS == ts) {
+                log.info("setting: " + ts + " as mutable table");
                 mutableTable = m;
             } else {
                 immutableTables.add(m);

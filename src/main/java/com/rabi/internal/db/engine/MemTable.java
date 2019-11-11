@@ -4,6 +4,8 @@ import java.io.IOException;
 
 public interface MemTable extends Loadable {
 
+    long size();
+
     void put(byte[] k, byte[] v) throws IOException;
 
     void delete(byte[] k) throws IOException;

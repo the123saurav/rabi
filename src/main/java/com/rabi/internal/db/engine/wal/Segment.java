@@ -70,7 +70,7 @@ public class Segment {
             }
         }
         makeWritable();
-        log.debug("loaded " + entries.size() + " from segment: " + path.getFileName());
+        log.info("loaded " + entries.size() + " from segment: " + path.getFileName());
         return entries;
     }
 

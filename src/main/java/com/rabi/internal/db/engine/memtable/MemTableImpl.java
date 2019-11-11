@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 
 //use jcstress for test
@@ -38,10 +39,11 @@ public class MemTableImpl implements MemTable {
         }
     }
 
-    private ConcurrentHashMap<ByteArrayWrapper, Value> m;
-    private Wal wal;
+    private final ConcurrentHashMap<ByteArrayWrapper, Value> m;
+    private final Wal wal;
     private boolean mutable;
-    private Logger log;
+    private final Logger log;
+    private final AtomicLong numOps;
 
     private static BiFunction<Value, Value, Value>
             mapper = (purana, naya) -> purana.vTime > naya.vTime ? purana : naya;
@@ -50,10 +52,11 @@ public class MemTableImpl implements MemTable {
         m = new ConcurrentHashMap<>();
         wal = w;
         log = logger;
+        numOps = new AtomicLong();
     }
 
     public void load() {
-        List<Entry> entries = null;
+        List<Entry> entries;
         try {
             entries = wal.load();
         } catch (IOException e) {
@@ -70,9 +73,13 @@ public class MemTableImpl implements MemTable {
                     since we are processing in order, we don't need to
                     compare vTime
                  */
-                m.put(new ByteArrayWrapper(key), new Value(null, vTime));
+                if (m.put(new ByteArrayWrapper(key), new Value(null, vTime)) == null) {
+                    numOps.incrementAndGet();
+                }
             } else {
-                m.put(new ByteArrayWrapper(key), new Value(e.getVal(), vTime));
+                if (m.put(new ByteArrayWrapper(key), new Value(e.getVal(), vTime)) == null) {
+                    numOps.incrementAndGet();
+                }
             }
         }
         /*Iterator<ByteArrayWrapper> it = m.keySet().iterator();
@@ -100,6 +107,11 @@ public class MemTableImpl implements MemTable {
     }
 
     @Override
+    public long size() {
+        return numOps.get();
+    }
+
+    @Override
     public void put(byte[] k, byte[] v) throws IOException {
         long vtime = wal.appendPut(k, v);
         ByteArrayWrapper b = new ByteArrayWrapper(k);
@@ -116,6 +128,7 @@ public class MemTableImpl implements MemTable {
     // this is not lock free as it internally locks the section.
     private void put(ByteArrayWrapper b, byte[] v, long vtime) {
         m.merge(b, new Value(v, vtime), mapper);
+        numOps.incrementAndGet();
         /*Value curr = m.get(b);
         if(curr == null || vtime > curr.vTime){
             m.put(b, new Value(v, vtime));
