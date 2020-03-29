@@ -19,7 +19,6 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  */
 
-//TODO use import com.google.common.base.Preconditions;
 //this class should not be exposed outside of Factory.
 public final class DBImpl implements DB {
 
@@ -51,17 +50,11 @@ public final class DBImpl implements DB {
      * @return a future whose completion indicates DB is ready for query.
      */
     @Override
-    public synchronized CompletableFuture<Void> open(Config c) {
+    public synchronized CompletableFuture<Void> open(Config c) throws CloneNotSupportedException {
         if (engine != null) {
             return CompletableFuture.completedFuture(null);
         }
-        Config cfg;
-        try {
-            cfg = (Config) c.clone();
-        } catch (CloneNotSupportedException e) {
-            throw new UnexpectedException(e.toString());
-        }
-
+        final Config cfg = (Config) c.clone();
         engine = new EngineImpl(this.dataDir, cfg, this.log);
         return CompletableFuture.runAsync(engine::start);
     }
@@ -85,11 +78,10 @@ public final class DBImpl implements DB {
     }
 
     @Override
-    public boolean delete(byte[] k) {
+    public void delete(byte[] k) {
         if (engine == null) {
             throw uninitializedError;
         }
-        return false;
     }
 
     @Override

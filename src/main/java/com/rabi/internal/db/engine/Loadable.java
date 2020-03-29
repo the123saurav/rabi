@@ -1,5 +1,5 @@
 package com.rabi.internal.db.engine;
 
-public interface Loadable {
-    void load();
+public interface Loadable<T> {
+    T load();
 }

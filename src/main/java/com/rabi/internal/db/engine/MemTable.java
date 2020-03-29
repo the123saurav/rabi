@@ -1,8 +1,11 @@
 package com.rabi.internal.db.engine;
 
-import java.io.IOException;
+import org.apache.commons.lang3.tuple.Pair;
 
-public interface MemTable extends Loadable {
+import java.io.IOException;
+import java.util.List;
+
+public interface MemTable extends Loadable<Void> {
 
     long size();
 
@@ -15,4 +18,10 @@ public interface MemTable extends Loadable {
     void disallowMutation();
 
     void close() throws IOException;
+
+    List<Pair<byte[], byte[]>> export();
+
+    long getId();
+
+    void cleanup() throws IOException;
 }

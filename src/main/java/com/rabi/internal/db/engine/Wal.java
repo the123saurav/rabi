@@ -4,6 +4,7 @@ import com.rabi.internal.db.engine.wal.Entry;
 import com.rabi.internal.exceptions.InvalidCheckpointException;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 
 public interface Wal {
@@ -57,4 +58,8 @@ public interface Wal {
      * This causes sync to disk device.
      */
     void close() throws IOException;
+
+    void renameToTmp() throws IOException;
+
+    void unlink() throws IOException;
 }

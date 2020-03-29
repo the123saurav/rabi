@@ -66,7 +66,7 @@ public class FilterImpl implements Filter {
     }
 
     @Override
-    public void load() {
+    public Void load() {
         try (FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
             loadHeader(ch);
             f = BloomFilter.create(
@@ -75,6 +75,7 @@ public class FilterImpl implements Filter {
         } catch (IOException e) {
             throw new InitialisationException("Error in loading index file: " + path + e.getMessage(), e);
         }
+        return null;
     }
 
     @Override

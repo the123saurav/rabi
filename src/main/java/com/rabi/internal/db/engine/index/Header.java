@@ -7,18 +7,17 @@ import java.nio.ByteOrder;
 /**
  * Header for index file.
  * <p>
- * Reserved 96 bytes at start.
  */
 public class Header {
 
     private static final short VERSION = 0;
-    static final short HEADER_LENGTH_BYTES = 97;
+    static final short HEADER_LENGTH_BYTES = 33;
 
     private final long totalKeys;
     private final long minKeyOffset;
     private final long maxKeyOffset;
 
-    private Header(long t, long minoff, long maxOff) {
+    Header(long t, long minoff, long maxOff) {
         totalKeys = t;
         minKeyOffset = minoff;
         maxKeyOffset = maxOff;

@@ -7,6 +7,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -18,7 +19,7 @@ import java.util.List;
 public class Segment {
 
     private static final int LOAD_SIZE_BYTES = 128 * 1024;
-    private final Path path;
+    private Path path;
     private final Logger log;
     private final boolean sync;
     /*
@@ -120,5 +121,13 @@ public class Segment {
         }
 
         writer.close(); //idempotent
+    }
+
+    void renameToTmp() throws IOException {
+        path = Files.move(path, Paths.get(path.getFileName().toString() + ".tmp"));
+    }
+
+    void unlink() throws IOException {
+        Files.deleteIfExists(path);
     }
 }

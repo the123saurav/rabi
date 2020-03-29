@@ -8,7 +8,7 @@ public class Entry {
     final byte[] key;
     final long offset;
 
-    private Entry(byte[] k, long o) {
+    Entry(byte[] k, long o) {
         key = k;
         offset = o;
     }

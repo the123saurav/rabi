@@ -13,11 +13,10 @@ public final class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
      * @param d byte array to be wrapped.
      */
     public ByteArrayWrapper(byte[] d) {
-        //TODO: data is an externally mutable field, maybe we should copy it first.
         if (d == null) {
             throw new NullPointerException();
         }
-        this.data = d;
+        this.data = d.clone();
     }
 
     public int length() {
@@ -40,5 +39,9 @@ public final class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
     @Override
     public int compareTo(ByteArrayWrapper o) {
         return UnsignedBytes.lexicographicalComparator().compare(data, o.data);
+    }
+
+    public byte[] unwrap(){
+        return data.clone();
     }
 }

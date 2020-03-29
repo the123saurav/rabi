@@ -5,14 +5,20 @@ import com.rabi.internal.db.engine.MemTable;
 import com.rabi.internal.db.engine.Wal;
 import com.rabi.internal.db.engine.wal.Entry;
 import com.rabi.internal.types.ByteArrayWrapper;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 //use jcstress for test
 public class MemTableImpl implements MemTable {
@@ -39,23 +45,27 @@ public class MemTableImpl implements MemTable {
         }
     }
 
-    private final ConcurrentHashMap<ByteArrayWrapper, Value> m;
+    private final Map<ByteArrayWrapper, Value> m;
     private final Wal wal;
+    private final long id;
     private boolean mutable;
     private final Logger log;
+    //TODO this is bad, replace with something else even we can sample memory usage
+    // with costly call say after every 100 ops. Use HyperLogLog.
     private final AtomicLong numOps;
 
     private static BiFunction<Value, Value, Value>
             mapper = (purana, naya) -> purana.vTime > naya.vTime ? purana : naya;
 
-    public MemTableImpl(Wal w, Logger logger) {
+    public MemTableImpl(Wal w, long ts, Logger logger) {
         m = new ConcurrentHashMap<>();
+        id = ts;
         wal = w;
         log = logger;
         numOps = new AtomicLong();
     }
 
-    public void load() {
+    public Void load() {
         List<Entry> entries;
         try {
             entries = wal.load();
@@ -64,6 +74,7 @@ public class MemTableImpl implements MemTable {
         }
         //now order entries as per vtime.
         entries.sort(null);
+        log.info("Memtable {} has {}  entries in WAL", id, entries.size());
 
         for (Entry e : entries) {
             byte[] key = e.getKey();
@@ -82,6 +93,7 @@ public class MemTableImpl implements MemTable {
                 }
             }
         }
+        log.info("Memtable {} has {}  entries in Map", id, m.size());
         /*Iterator<ByteArrayWrapper> it = m.keySet().iterator();
         minKey = it.next();
         maxKey = minKey;
@@ -96,6 +108,7 @@ public class MemTableImpl implements MemTable {
             }
         }catch (NoSuchElementException ex){
         }*/
+        return null;
     }
 
     public void allowMutation() {
@@ -139,6 +152,28 @@ public class MemTableImpl implements MemTable {
     public void close() throws IOException {
         wal.close();
     }
+
+    @Override
+    public List<Pair<byte[], byte[]>> export() {
+        return m.entrySet().stream()
+                .map(e -> new ImmutablePair<byte[], byte[]>(e.getKey().unwrap(), e.getValue().val))
+                .collect(Collectors.toCollection(ArrayList<Pair<byte[], byte[]>>::new));
+    }
+
+    public long getId(){
+        return id;
+    }
+
+    /**
+     * rename wal to .tmp and then unlink.
+     */
+    @Override
+    public void cleanup() throws IOException {
+        wal.close();
+        wal.renameToTmp(); //so that if below fails, its cleaned up on boot
+        wal.unlink();
+    }
+
 }
 
 

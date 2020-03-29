@@ -6,7 +6,10 @@ import com.rabi.exceptions.InitialisationException;
 import com.rabi.exceptions.InvalidDBStateException;
 import com.rabi.exceptions.WritesStalledException;
 import com.rabi.internal.db.Engine;
-import com.rabi.internal.db.engine.filter.FilterImpl;
+import com.rabi.internal.db.engine.channel.Message;
+import com.rabi.internal.db.engine.channel.message.EngineToFlusher;
+import com.rabi.internal.db.engine.channel.message.FlusherToEngine;
+import com.rabi.internal.db.engine.flusher.FlusherImpl;
 import com.rabi.internal.db.engine.index.IndexImpl;
 import com.rabi.internal.db.engine.memtable.MemTableImpl;
 import com.rabi.internal.db.engine.task.boot.BaseTask;
@@ -26,7 +29,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
@@ -35,11 +40,11 @@ import java.util.stream.Stream;
 
 public class EngineImpl implements Engine {
 
-    private static String WAL_SUFFIX = ".wal";
-    private static String L2_INDEX_SUFFIX = ".l2.index";
-    private static String L3_INDEX_SUFFIX = ".l3.index";
-    private static String DATA_SUFFIX = ".data";
-    private static String TMP_SUFFIX = ".tmp";
+    private final static String WAL_SUFFIX = ".wal";
+    private final static String L2_INDEX_SUFFIX = ".l2.index";
+    private final static String L3_INDEX_SUFFIX = ".l3.index";
+    private final static String DATA_SUFFIX = ".data";
+    private final static String TMP_SUFFIX = ".tmp";
 
     private enum FileType {
         WAL, DATA, L2INDEX, L3INDEX, TMP
@@ -49,14 +54,51 @@ public class EngineImpl implements Engine {
     private final Config cfg;
     private final Logger log;
     private final long maxKeys;
-
-    private volatile State state;
     private final ReentrantLock mutLock;
+    private final ConcurrentLinkedDeque<MemTable> immutableTables;
+    private final List<Index> l2Indexes;
+    private final List<Index> l3Indexes;
+    private final BlockingQueue<EngineToFlusher> toFlusher;
+    private final BlockingQueue<Message> fromFlusher;
 
-    private ConcurrentLinkedDeque<MemTable> immutableTables = new ConcurrentLinkedDeque<>();
+    private class MessageListener implements Runnable {
+
+        @Override
+        public void run() {
+            log.info("Starting engine EventListener...");
+            while (true) {
+                Message m;
+                try {
+                    m = fromFlusher.take();
+                } catch (InterruptedException e) {
+                    log.warn("EventListener interrupted, exiting...");
+                    return;
+                }
+                if(m instanceof FlusherToEngine){
+                    try {
+                        handleFlusherMessage((FlusherToEngine)m);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+        }
+
+        private void handleFlusherMessage(FlusherToEngine e) throws IOException {
+            log.info("received message from Flusher: {}", e.getIndex());
+            l2Indexes.add(e.getIndex());
+            MemTable m = immutableTables.getLast();
+            immutableTables.removeLast();
+            log.info("removing wal");
+            m.cleanup();
+        }
+    }
+
+    // mutables
+    private volatile State state;
     private volatile MemTable mutableTable;
-    private List<Index> l2Indexes = new ArrayList<>();
-    private List<Filter> l3Filters = new ArrayList<>();
+    private Thread flusher;
+    private Thread eventListener;
 
     public EngineImpl(String dDir, Config cfg, Logger logger) {
         this.dataDir = Paths.get(dDir);
@@ -65,6 +107,11 @@ public class EngineImpl implements Engine {
         this.state = State.INITIALZED;
         this.maxKeys = cfg.getMemtableMaxKeys();
         this.mutLock = new ReentrantLock();
+        this.immutableTables = new ConcurrentLinkedDeque<>();
+        this.l2Indexes = new ArrayList<>();
+        this.l3Indexes = new ArrayList<>();
+        this.toFlusher = new LinkedBlockingQueue<>();
+        this.fromFlusher = new LinkedBlockingQueue<>();
         logger.debug("memtable max keys: " + this.maxKeys);
     }
 
@@ -72,8 +119,8 @@ public class EngineImpl implements Engine {
      * At boot-up we have number of activities to do which can be parallelized.
      * 1. cleanup
      * 2. read WAL and populate memtables.
-     * 3. load l1 index(parallelism upto number of L1 files)
-     * 4. populate l2 bloom(parallelism upto number of L2 files)
+     * 3. load l2 index(parallelism upto number of L2 files)
+     * 4. load l3 index(parallelism upto number of L3 files)
      * 5. start runtime routines
      * The engine first gathers number of independent task.
      * <p>
@@ -133,6 +180,7 @@ public class EngineImpl implements Engine {
                 ex.shutdown();
                 try {
                     ex.awaitTermination(600, TimeUnit.SECONDS);
+                    log.info("Processed all boot files.");
                 } catch (InterruptedException e) {
                     errInInit = true;
                 }
@@ -158,7 +206,14 @@ public class EngineImpl implements Engine {
         }
 
         //start runtime routines below
+        eventListener = new Thread(new MessageListener());
+        flusher = new Thread(new FlusherImpl(toFlusher, fromFlusher));
 
+        eventListener.start();
+        flusher.start();
+        if(immutableTables.size() > 0){
+            toFlusher.add(new EngineToFlusher(immutableTables.getLast(), cfg.getSync(), dataDir));
+        }
         this.state = State.RUNNING;
         log.info("Engine is running now.");
     }
@@ -211,12 +266,16 @@ public class EngineImpl implements Engine {
         //TODO: maybe check if mutation disallowed exception and retry
         mutableTable.put(k, v);
         if (mutableTable.size() > maxKeys && mutLock.tryLock()) {
-            log.info("memtable full, rotating.");
-            MemTable newTable = newTable(Instant.now().toEpochMilli());
-            newTable.load(); //creates segments
-            immutableTables.add(mutableTable);
-            mutableTable = newTable;
-            mutLock.unlock();
+            if(mutableTable.size() > maxKeys) { //DCL
+                log.info("memtable full, rotating.");
+                MemTable newTable = newTable(Instant.now().toEpochMilli());
+                newTable.load(); //creates segments
+                immutableTables.add(mutableTable);
+                mutableTable = newTable;
+                log.info("signalling flusher...");
+                toFlusher.add(new EngineToFlusher(immutableTables.getLast(), cfg.getSync(), dataDir));
+                mutLock.unlock();
+            }
         }
     }
 
@@ -231,8 +290,7 @@ public class EngineImpl implements Engine {
 
         //TODO: maybe check if mutation disallowed exception and retry
         mutableTable.delete(k);
-        if (mutableTable.size() > maxKeys) {
-            if (mutLock.tryLock()) {
+        if (mutableTable.size() > maxKeys && mutLock.tryLock()) {
                 if (mutableTable.size() > maxKeys) {
                     log.debug("memtable full, rotating.");
                     MemTable newTable = newTable(Instant.now().toEpochMilli());
@@ -242,7 +300,6 @@ public class EngineImpl implements Engine {
                 }
                 mutLock.unlock();
             }
-        }
     }
 
     /**
@@ -284,7 +341,7 @@ public class EngineImpl implements Engine {
                     tasks.addAll(getL2IndexTasks(p));
                     break;
                 case L3INDEX:
-                    tasks.addAll(getL3FilterTasks(p));
+                    tasks.addAll(getL3IndexTasks(p));
                     break;
             }
         });
@@ -334,22 +391,20 @@ public class EngineImpl implements Engine {
         for (int i = 0; i < numSeg; ++i) {
             segs[i] = new Segment(Paths.get(dataDir.toString() + "/" + ts + "." + i + "." + "wal"), cfg.getSync(), log);
         }
-        return new MemTableImpl(new WalImpl(ts, segs, log), log);
+        return new MemTableImpl(new WalImpl(ts, segs, log), ts, log);
     }
 
     private List<BaseTask> getL2IndexTasks(List<Path> paths) {
         return paths.stream().map(p -> {
-            Index i = new IndexImpl(p);
-            l2Indexes.add(i);
-            return new LoadableTask(i, log);
+            Loadable l = new IndexImpl.IndexLoader(p);
+            return new LoadableTask<Index>(l, log, l2Indexes::add);
         }).collect(Collectors.toList());
     }
 
-    private List<BaseTask> getL3FilterTasks(List<Path> paths) {
+    private List<BaseTask> getL3IndexTasks(List<Path> paths) {
         return paths.stream().map(p -> {
-            Filter f = new FilterImpl(p);
-            l3Filters.add(f);
-            return new LoadableTask(f, log);
+            Loadable l = new IndexImpl.IndexLoader(p);
+            return new LoadableTask<Index>(l, log, l3Indexes::add);
         }).collect(Collectors.toList());
     }
 }

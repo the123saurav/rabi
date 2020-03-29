@@ -6,6 +6,11 @@ import org.slf4j.Logger;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * DBFactory creates DB instances.
+ * There is one DB instance per data directory.
+ * There could be multiple DB instances existing at the same time.
+ */
 public final class DBFactory {
 
     private static Map<String, DB> instances = new HashMap<>();

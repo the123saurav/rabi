@@ -11,7 +11,7 @@ import java.nio.ByteOrder;
  * key_len max 2^8 - 1 bytes
  * val_len max 2^32 -1 bytes
  *
- * <version><vTime><op_type><key_len><key>[<val_len><val>](Only for delete)
+ * <version><vTime><op_type><key_len><key>[<val_len><val>](Only for PUT)
  * 1+8+1+1+m+4+n
  */
 public class Entry implements Comparable<Entry> {

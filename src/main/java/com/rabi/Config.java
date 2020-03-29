@@ -11,7 +11,7 @@ public final class Config implements Cloneable {
         GRACEFUL, FAST
     }
 
-    private static final int maxMemtables = 3;
+    private static final int maxMemtables = 4;
 
     private static final int maxFlushedFiles = 4;
 

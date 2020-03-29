@@ -12,7 +12,7 @@ public interface DB {
      * @param cfg Config for rabi, this can be set only once.
      * @return a future whose completion with 'true' indicates DB is ready.
      */
-    CompletableFuture<Void> open(Config cfg);
+    CompletableFuture<Void> open(Config cfg) throws CloneNotSupportedException;
 
     /**
      * @param k key to get value for.
@@ -25,7 +25,7 @@ public interface DB {
      * puts a key.
      *
      * @param k key should be less than 256 bytes
-     * @param v value
+     * @param v value should be less than 65535(2^16 - 1) B.
      * @throws IOException
      */
     void put(byte[] k, byte[] v) throws IOException;
@@ -38,7 +38,7 @@ public interface DB {
      * throws InvalidDBStateException if DB is not running.
      * This doesn't err if key doesn't exist.
      */
-    boolean delete(byte[] k);
+    void delete(byte[] k);
 
     /**
      * stops the DB. This doesn't block caller but returns Future which caller

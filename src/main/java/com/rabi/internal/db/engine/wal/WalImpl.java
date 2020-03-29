@@ -6,6 +6,7 @@ import com.rabi.internal.exceptions.InvalidCheckpointException;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -18,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
   THINK about using mem outside Heap for GC overhead skipping.
 
-  For parallelizing, we can have:
+  For parallelising, we can have:
   - multiple WAL segments per memtable which governs parallelism.
     We have either one thread writer per segment and writing work
     to thread via queue per thread.
@@ -34,6 +35,7 @@ public class WalImpl implements Wal {
     private final Segment[] segments;
     private final AtomicLong next;
     private final Logger log;
+    private boolean closed = false;
 
     public WalImpl(long t, Segment[] segs, Logger logger) {
         ts = t;
@@ -95,8 +97,25 @@ public class WalImpl implements Wal {
 
     @Override
     public void close() throws IOException {
+        if(!closed) {
+            for (Segment segment : segments) {
+                segment.close();
+            }
+            closed = true;
+        }
+    }
+
+    @Override
+    public void renameToTmp() throws IOException {
         for (Segment segment : segments) {
-            segment.close();
+            segment.renameToTmp();
+        }
+    }
+
+    @Override
+    public void unlink() throws IOException {
+        for (Segment segment : segments) {
+            segment.unlink();
         }
     }
 }
