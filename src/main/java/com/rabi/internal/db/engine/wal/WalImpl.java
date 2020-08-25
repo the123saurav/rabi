@@ -3,12 +3,11 @@ package com.rabi.internal.db.engine.wal;
 import com.rabi.exceptions.InitialisationException;
 import com.rabi.internal.db.engine.Wal;
 import com.rabi.internal.exceptions.InvalidCheckpointException;
-import org.slf4j.Logger;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
 
 /*
   TODO: add CRC event.
@@ -33,96 +32,96 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class WalImpl implements Wal {
 
-    private final long ts;
-    private final Segment[] segments;
-    private final AtomicLong next;
-    private final Logger log;
-    private boolean closed = false;
+  private final long ts;
+  private final Segment[] segments;
+  private final AtomicLong next;
+  private final Logger log;
+  private boolean closed = false;
 
-    public WalImpl(long t, Segment[] segs, Logger logger) {
-        ts = t;
-        next = new AtomicLong();
-        segments = segs;
-        log = logger;
+  public WalImpl(long t, Segment[] segs, Logger logger) {
+    ts = t;
+    next = new AtomicLong();
+    segments = segs;
+    log = logger;
+  }
+
+  @Override
+  public List<Record> load() {
+    log.debug("loading WAL: " + ts);
+    final List<Record> records = new ArrayList<>();
+    for (final Segment s : segments) {
+      try {
+        records.addAll(s.load());
+      } catch (IOException e) {
+        throw new InitialisationException(e);
+      }
     }
+    return records;
+  }
 
-    @Override
-    public List<Record> load() {
-        log.debug("loading WAL: " + ts);
-        final List<Record> records = new ArrayList<>();
-        for (final Segment s : segments) {
-            try {
-                records.addAll(s.load());
-            } catch (IOException e) {
-                throw new InitialisationException(e);
-            }
-        }
-        return records;
-    }
-
-    @Override
-    public long appendPut(final byte[] k, final byte[] v) throws IOException {
+  @Override
+  public long appendPut(final byte[] k, final byte[] v) throws IOException {
         /*
          vTime is used for ordering across segments during load.
          As can be seen the ordering is when we wrote to WAL and not when the operation
          returned to caller.
          */
-        final long vTime = next.incrementAndGet();
+    final long vTime = next.incrementAndGet();
         /*
         now at this point all concurrent threads have a distinct
         value.
          */
-        segments[(int) vTime % segments.length].appendPut(k, v);
-        return vTime;
-    }
+    segments[(int) vTime % segments.length].appendPut(k, v);
+    return vTime;
+  }
 
-    @Override
-    public long appendDelete(byte[] k) throws IOException {
-        long vTime = next.incrementAndGet();
+  @Override
+  public long appendDelete(byte[] k) throws IOException {
+    long vTime = next.incrementAndGet();
         /*
         now at this point all concurrent threads have a distinct
         value.
          */
-        segments[(int) vTime % segments.length].appendDelete(k);
-        return vTime;
-    }
+    segments[(int) vTime % segments.length].appendDelete(k);
+    return vTime;
+  }
 
-    @Override
-    public void checkpoint(long offset) throws InvalidCheckpointException {
+  @Override
+  public void checkpoint(long offset) throws InvalidCheckpointException {
 
-    }
+  }
 
-    @Override
-    public long getCheckpointOffset() {
-        return 0;
-    }
+  @Override
+  public long getCheckpointOffset() {
+    return 0;
+  }
 
-    @Override
-    public long getLastOffset() {
-        return 0;
-    }
+  @Override
+  public long getLastOffset() {
+    return 0;
+  }
 
-    @Override
-    public void close() throws IOException {
-        if(!closed) {
-            for (Segment segment : segments) {
-                segment.close();
-            }
-            closed = true;
-        }
+  @Override
+  public void close() throws IOException {
+    if (!closed) {
+      for (Segment segment : segments) {
+        segment.close();
+      }
+      closed = true;
     }
+  }
 
-    @Override
-    public void renameToTmp() throws IOException {
-        for (Segment segment : segments) {
-            segment.renameToTmp();
-        }
+  @Override
+  public void renameToTmp() throws IOException {
+    for (Segment segment : segments) {
+      segment.renameToTmp();
     }
+  }
 
-    @Override
-    public void unlink() throws IOException {
-        for (Segment segment : segments) {
-            segment.unlink();
-        }
+  @Override
+  public void unlink() throws IOException {
+    for (Segment segment : segments) {
+      segment.unlink();
     }
+  }
 }
