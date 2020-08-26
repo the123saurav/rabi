@@ -2,6 +2,7 @@ package com.rabi.internal.db.engine.task.boot;
 
 import com.rabi.exceptions.InitialisationException;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -13,16 +14,15 @@ import java.nio.file.Path;
 public class FileCleanupTask extends BaseTask {
 
     private final Path file;
-    private final Logger log;
+    private static final Logger LOG = LoggerFactory.getLogger(FileCleanupTask.class);
 
-    public FileCleanupTask(Path file, Logger logger) {
+    public FileCleanupTask(final Path file) {
         this.file = file;
-        this.log = logger;
     }
 
     @Override
     public void run() {
-        log.debug("[FileCleanupTask] deleting file: " + file);
+        LOG.debug("[FileCleanupTask] deleting file: " + file);
         //doesn't work for directories.
         try {
             Files.delete(file);

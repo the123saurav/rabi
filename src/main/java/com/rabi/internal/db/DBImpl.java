@@ -8,18 +8,20 @@ import com.rabi.exceptions.UnexpectedException;
 import com.rabi.internal.db.engine.EngineImpl;
 import org.slf4j.Logger;
 
+import javax.annotation.Nonnull;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * This class is still a Facade over DB engine which is an FSM.
+ * This class is a Facade over DB engine which is an FSM.
  * The Stats class is also part of DB engine(should that be part of DBImpl and updates are sent to
  * it via queue just to fasten it up, maybe in future). DBEngine would have
  * state and it will reject calls to it unless running.
  * <p>
  */
 
-//this class should not be exposed outside of Factory.
 public final class DBImpl implements DB {
 
     private final String dataDir;
@@ -28,15 +30,27 @@ public final class DBImpl implements DB {
 
     private Engine engine;
 
-    private final DBUinitializedException uninitializedError = new DBUinitializedException();
+    private static final DBUinitializedException uninitializedError = new DBUinitializedException();
+
+    private static final Map<String, DBImpl> instances = new HashMap<>();
 
     /**
      * implementation of db.
      *
-     * @param dDir   data directory
+     * @param dataDir   data directory
      * @param logger logger
      */
-    public DBImpl(String dDir, Logger logger) {
+
+    public static synchronized DB get(final String dataDir, final Logger logger) {
+        DBImpl instance = instances.get(dataDir);
+        if (instance == null) {
+            instance = new DBImpl(dataDir, logger);
+            instances.put(dataDir, instance);
+        }
+        return instance;
+    }
+
+    private DBImpl(String dDir, Logger logger) {
         this.dataDir = dDir;
         this.log = logger;
         this.stats = new Stats(logger);
@@ -92,7 +106,8 @@ public final class DBImpl implements DB {
         return CompletableFuture.runAsync(() -> {
             try {
                 engine.shutdown();
-            } catch (Exception e) {
+                instances.remove(dataDir);
+            } catch (final Exception e) {
                 throw new ShutdownException(e);
             }
         });

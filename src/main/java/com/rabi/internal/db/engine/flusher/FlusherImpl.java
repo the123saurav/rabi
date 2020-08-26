@@ -43,9 +43,9 @@ public final class FlusherImpl implements Flusher, Runnable {
         EngineToFlusher msg;
         while (true) {
             try {
-                msg = fromEngine.take();
+                msg = fromEngine.take(); //block for task
                 // engine adds the index and removes immutable table.
-                Index i = doFlush(msg.getMemTable(), msg.getDataDir(), msg.getSyncMode());
+                final Index i = doFlush(msg.getMemTable(), msg.getDataDir(), msg.getSyncMode());
                 toEngine.add(new FlusherToEngine(i));
             } catch (InterruptedException e) {
                 log.info("Shutting down routine...");
@@ -55,13 +55,12 @@ public final class FlusherImpl implements Flusher, Runnable {
     }
 
     //TODO: add annotation for expo backoff
-    private Index doFlush(MemTable m, Path dataDir, boolean syncMode) throws InterruptedException {
+    private Index doFlush(final MemTable m, final Path dataDir, final boolean syncMode) throws InterruptedException {
         while (true){
             try {
                 return flush(m, dataDir, syncMode);
             } catch (IOException e) {
                 e.printStackTrace();
-                Thread.currentThread().sleep(1000);
             }
         }
     }
@@ -73,21 +72,22 @@ public final class FlusherImpl implements Flusher, Runnable {
      * - create index file
      * - rename .tmp
      */
-    private Index flush(MemTable m, Path dataDir, boolean syncMode) throws IOException {
-        long id = m.getId();
-        List<Pair<byte[], byte[]>> entrySet = m.export();
-        log.info(String.format("Flushing memtable: %s with %d entries, id: %d", m.getId(), m.size(), id));
-        Data d = flushDataFile(entrySet, dataDir, id, syncMode);
-        Index i = flushIndexFile(entrySet, dataDir, id, syncMode);
+    private Index flush(final MemTable m, final Path dataDir, final boolean syncMode) throws IOException {
+        final long id = m.getId();
+        final List<Pair<byte[], byte[]>> recordSet = m.export();
+        log.info(String.format("Flushing memtable: %s with %d records, id: %d", m.getId(), m.size(), id));
+        final Data d = flushDataFile(recordSet, dataDir, id, syncMode);
+        final Index i = flushIndexFile(recordSet, dataDir, id, syncMode);
         d.rename(Paths.get(dataDir.toString() + "/" + id + ".l2.data"));
         i.rename(Paths.get(dataDir.toString() + "/" + id + ".l2.index"));
         return i;
     }
 
-    private Data flushDataFile(final List<Pair<byte[], byte[]>> entrySet, Path dataDir, long id, boolean syncMode) throws IOException {
-        Data d = new DataImpl(Paths.get(dataDir.toString() + "/" + id + ".l2.data.tmp"), syncMode);
+    private Data flushDataFile(final List<Pair<byte[], byte[]>> recordSet,
+                               final Path dataDir, final long id, final boolean syncMode) throws IOException {
+        final Data d = new DataImpl(Paths.get(dataDir.toString() + "/" + id + ".l2.data.tmp"), syncMode);
         log.info(String.format("Flushing datafile %s", id));
-        d.flush(entrySet);
+        d.flush(recordSet);
         log.info(String.format("Flushed datafile %s", id));
         return d;
     }
@@ -110,7 +110,7 @@ public final class FlusherImpl implements Flusher, Runnable {
             if(e.getRight() != null) {
                 currOffset = fileOffset;
                 fileOffset += 1 + 2 + e.getLeft().length + e.getRight().length;
-                //minkey/maxkey os one of the keys in data file
+                //minkey/maxkey is one of the keys in data file
                 if (k.compareTo(minKey) <= 0) {
                     minKey = k;
                     minKeyOffset = currOffset;
@@ -123,7 +123,7 @@ public final class FlusherImpl implements Flusher, Runnable {
             m.put(k, currOffset);
         }
 
-        Index i = IndexImpl.loadedIndex(m, minKey.unwrap(), minKeyOffset, maxKey.unwrap(), maxKeyOffset);
+        final Index i = IndexImpl.loadedIndex(m, minKey.unwrap(), minKeyOffset, maxKey.unwrap(), maxKeyOffset);
         i.overwrite(Paths.get(dataDir.toString() + "/" + id + ".l2.index.tmp"), syncMode);
         return i;
     }

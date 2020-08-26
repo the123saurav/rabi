@@ -1,10 +1,9 @@
 package com.rabi.internal.db.engine;
 
-import com.rabi.internal.db.engine.wal.Entry;
+import com.rabi.internal.db.engine.wal.Record;
 import com.rabi.internal.exceptions.InvalidCheckpointException;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.List;
 
 public interface Wal {
@@ -12,7 +11,7 @@ public interface Wal {
     /**
      * Loads a WAL represented by file path.
      */
-    List<Entry> load() throws IOException;
+    List<Record> load() throws IOException;
 
     /**
      * appends a put entry in WAL returning offset

@@ -22,12 +22,13 @@ import static com.rabi.internal.db.engine.util.FileUtils.atomicWrite;
  * The file looks like:
  * <p>
  * 8 bytes free at start.
+ * <version> (1)
  * <num_keys> (8)
  * <min_key_offset> (8)
  * <max_key_offset> (8)
  *
  * <key_len><key><offset>
- * 1  +   m +  8
+ * 1  +       m +   8
  * <p>
  * Deleted keys are also present in index with offset as 0.
  */
@@ -60,9 +61,12 @@ public class IndexImpl implements Index {
     }
 
     public static IndexImpl loadedIndex(
-            Map<ByteArrayWrapper, Long> m, byte[] minKey,
-            long minKeyOffset, byte[] maxKey, long maxKeyOffset) {
-        IndexImpl i = new IndexImpl();
+            final Map<ByteArrayWrapper, Long> m,
+            final byte[] minKey,
+            final long minKeyOffset,
+            final byte[] maxKey,
+            final long maxKeyOffset) {
+        final IndexImpl i = emptyIndex();
         i.map = m;
         i.minKeyOffset = minKeyOffset;
         i.maxKeyOffset = maxKeyOffset;
@@ -72,25 +76,25 @@ public class IndexImpl implements Index {
         return i;
     }
 
-    private void loadHeader(FileChannel ch) throws IOException {
-        ByteBuffer loadBuffer = ByteBuffer.allocate(Header.HEADER_LENGTH_BYTES);
+    private void loadHeader(final FileChannel ch) throws IOException {
+        final ByteBuffer loadBuffer = ByteBuffer.allocate(Header.HEADER_LENGTH_BYTES);
         ch.read(loadBuffer); //maybe empty
         loadBuffer.flip();
-        Header h = Header.deserialize(loadBuffer);
+        final Header h = Header.deserialize(loadBuffer);
         minKeyOffset = h.getMinKeyOffset();
         maxKeyOffset = h.getMaxKeyOffset();
         totalKeys = h.getTotalKeys();
     }
 
-    private void loadEntries(FileChannel ch) throws IOException {
-        ByteBuffer loadBuffer = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
-        Entry e;
+    private void loadRecords(final FileChannel ch) throws IOException {
+        final ByteBuffer loadBuffer = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
+        Record e;
         loadBuffer.mark();
         while (ch.read(loadBuffer) > 0) {
             loadBuffer.flip();// trim buffer to filled value
             while (loadBuffer.hasRemaining()) { // while we have not read whole buffer
                 loadBuffer.mark();
-                e = Entry.tryDeserialize(loadBuffer);
+                e = Record.tryDeserialize(loadBuffer);
                 if (e == null) {
                     loadBuffer.reset();
                     break;
@@ -107,11 +111,11 @@ public class IndexImpl implements Index {
         }
     }
 
-    public void load(Path p) {
+    public void load(final Path p) {
         path = p;
-        try (FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
+        try (final FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
             loadHeader(ch);
-            loadEntries(ch);
+            loadRecords(ch);
         } catch (IOException e) {
             throw new InitialisationException("Error in loading index file: " + path + e.getMessage(), e);
         }
@@ -159,7 +163,7 @@ public class IndexImpl implements Index {
              */
             for (Map.Entry<ByteArrayWrapper, Long> e : map.entrySet()) {
                 // index file has PUT and DELETE values.
-                b.put(new Entry(e.getKey().unwrap(), e.getValue()).serialize());
+                b.put(new Record(e.getKey().unwrap(), e.getValue()).serialize());
                 if (b.remaining() < MAX_ENTRY_SIZE_BYTES) {
                     b.flip();
                     log.info("writing chunk to index file: {} bytes", b.limit());
@@ -189,7 +193,7 @@ public class IndexImpl implements Index {
 
         @Override
         public Index load() {
-            IndexImpl i = emptyIndex();
+            final IndexImpl i = emptyIndex();
             i.load(p);
             return i;
         }

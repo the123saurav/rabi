@@ -3,14 +3,13 @@ package com.rabi.internal.db.engine.memtable;
 import com.rabi.exceptions.InitialisationException;
 import com.rabi.internal.db.engine.MemTable;
 import com.rabi.internal.db.engine.Wal;
-import com.rabi.internal.db.engine.wal.Entry;
+import com.rabi.internal.db.engine.wal.Record;
 import com.rabi.internal.types.ByteArrayWrapper;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -66,20 +65,24 @@ public class MemTableImpl implements MemTable {
     }
 
     public Void load() {
-        List<Entry> entries;
+
+        List<Record> records;
         try {
-            entries = wal.load();
-        } catch (IOException e) {
+            records = wal.load();
+        } catch (final IOException e) {
             throw new InitialisationException(e);
         }
-        //now order entries as per vtime.
-        entries.sort(null);
-        log.info("Memtable {} has {}  entries in WAL", id, entries.size());
 
-        for (Entry e : entries) {
-            byte[] key = e.getKey();
-            long vTime = e.getVTime();
-            if (e.getOp() == Entry.OpType.DELETE) {
+        //now order records as per vtime.
+        records.sort(null);
+        log.info("Memtable {} has {} records in WAL", id, records.size());
+
+        for (final Record e : records) {
+
+            final byte[] key = e.getKey();
+            final long vTime = e.getVTime();
+
+            if (e.getOp() == Record.OpType.DELETE) {
                 /*
                     since we are processing in order, we don't need to
                     compare vTime
@@ -93,7 +96,8 @@ public class MemTableImpl implements MemTable {
                 }
             }
         }
-        log.info("Memtable {} has {}  entries in Map", id, m.size());
+
+        log.info("Memtable {} has {} records in Map", id, m.size());
         /*Iterator<ByteArrayWrapper> it = m.keySet().iterator();
         minKey = it.next();
         maxKey = minKey;
@@ -125,21 +129,22 @@ public class MemTableImpl implements MemTable {
     }
 
     @Override
-    public void put(byte[] k, byte[] v) throws IOException {
-        long vtime = wal.appendPut(k, v);
-        ByteArrayWrapper b = new ByteArrayWrapper(k);
+    public void put(final byte[] k, final byte[] v) throws IOException {
+        final long vtime = wal.appendPut(k, v);
+        final ByteArrayWrapper b = new ByteArrayWrapper(k);
         put(b, v, vtime);
     }
 
     @Override
-    public void delete(byte[] k) throws IOException {
-        long vtime = wal.appendDelete(k);
-        ByteArrayWrapper b = new ByteArrayWrapper(k);
+    public void delete(final byte[] k) throws IOException {
+        final long vtime = wal.appendDelete(k);
+        final ByteArrayWrapper b = new ByteArrayWrapper(k);
         put(b, null, vtime);
     }
 
     // this is not lock free as it internally locks the section.
-    private void put(ByteArrayWrapper b, byte[] v, long vtime) {
+    private void put(final ByteArrayWrapper b, final byte[] v, final long vtime) {
+        // the mapper ensures that the order dictated by WAL's vTime is honoured in map too
         m.merge(b, new Value(v, vtime), mapper);
         numOps.incrementAndGet();
         /*Value curr = m.get(b);
@@ -156,8 +161,8 @@ public class MemTableImpl implements MemTable {
     @Override
     public List<Pair<byte[], byte[]>> export() {
         return m.entrySet().stream()
-                .map(e -> new ImmutablePair<byte[], byte[]>(e.getKey().unwrap(), e.getValue().val))
-                .collect(Collectors.toCollection(ArrayList<Pair<byte[], byte[]>>::new));
+                .map(e -> new ImmutablePair<>(e.getKey().unwrap(), e.getValue().val))
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     public long getId(){
@@ -173,7 +178,6 @@ public class MemTableImpl implements MemTable {
         wal.renameToTmp(); //so that if below fails, its cleaned up on boot
         wal.unlink();
     }
-
 }
 
 

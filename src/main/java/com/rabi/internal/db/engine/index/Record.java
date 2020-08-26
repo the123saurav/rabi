@@ -4,11 +4,11 @@ import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-public class Entry {
+class Record {
     final byte[] key;
     final long offset;
 
-    Entry(byte[] k, long o) {
+    Record(byte[] k, long o) {
         key = k;
         offset = o;
     }
@@ -22,7 +22,7 @@ public class Entry {
                 .rewind();
     }
 
-    public static Entry tryDeserialize(ByteBuffer b) {
+    static Record tryDeserialize(final ByteBuffer b) {
         try {
             return deserialize(b);
         } catch (BufferOverflowException ex) {
@@ -30,11 +30,11 @@ public class Entry {
         }
     }
 
-    public static Entry deserialize(ByteBuffer b) {
-        short t = b.get();
-        byte[] k = new byte[t];
+    private static Record deserialize(final ByteBuffer b) {
+        final short t = b.get();
+        final byte[] k = new byte[t];
         b.get(k);
-        long off = b.getLong();
-        return new Entry(k, off);
+        final long off = b.getLong();
+        return new Record(k, off);
     }
 }

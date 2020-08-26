@@ -17,7 +17,7 @@ public class Header {
     private final long minKeyOffset;
     private final long maxKeyOffset;
 
-    Header(long t, long minoff, long maxOff) {
+    Header(final long t, final long minoff, final long maxOff) {
         totalKeys = t;
         minKeyOffset = minoff;
         maxKeyOffset = maxOff;
@@ -54,11 +54,11 @@ public class Header {
         }
     }
 
-    public static Header deserialize(ByteBuffer b) {
+    public static Header deserialize(final ByteBuffer b) {
         b.position(b.position() + 9);
-        long t = b.getLong();
+        long total = b.getLong();
         long minOff = b.getLong();
         long maxOff = b.getLong();
-        return new Header(t, minOff, maxOff);
+        return new Header(total, minOff, maxOff);
     }
 }

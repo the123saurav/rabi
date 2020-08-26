@@ -12,7 +12,7 @@ public class HaltingFixedThreadPoolExecutor extends ThreadPoolExecutor {
     public HaltingFixedThreadPoolExecutor(int nThreads, ThreadFactory t) {
         super(nThreads, nThreads,
                 0L, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<Runnable>(),
+                new LinkedBlockingQueue<>(),
                 t);
     }
 
@@ -34,6 +34,7 @@ public class HaltingFixedThreadPoolExecutor extends ThreadPoolExecutor {
           }*/
         if (t != null) {
             didErr = true;
+            // Error in any task should shut down the executor.
             if (!isTerminating()) {
                 shutdown();
             }

@@ -4,7 +4,7 @@ import java.io.IOException;
 
 public interface Engine {
     enum State {
-        INITIALZED, BOOTING, RUNNING, TERMINATING, TERMINATED
+        INITIALIZED, BOOTING, RUNNING, TERMINATING, TERMINATED
     }
 
     void start();

@@ -104,7 +104,7 @@ public class EngineImpl implements Engine {
         this.dataDir = Paths.get(dDir);
         this.cfg = cfg;
         this.log = logger;
-        this.state = State.INITIALZED;
+        this.state = State.INITIALIZED;
         this.maxKeys = cfg.getMemtableMaxKeys();
         this.mutLock = new ReentrantLock();
         this.immutableTables = new ConcurrentLinkedDeque<>();
@@ -122,7 +122,7 @@ public class EngineImpl implements Engine {
      * 3. load l2 index(parallelism upto number of L2 files)
      * 4. load l3 index(parallelism upto number of L3 files)
      * 5. start runtime routines
-     * The engine first gathers number of independent task.
+     * The engine first gathers number of independent tasks.
      * <p>
      * Note that only 1,2,3,4 are in purview of parallelism.
      */
@@ -139,11 +139,12 @@ public class EngineImpl implements Engine {
         }
 
         Function<Path, FileType> fileTypeMapper = p -> {
-            if (p.toString().endsWith(WAL_SUFFIX)) {
+            final String pathStr = p.toString();
+            if (pathStr.endsWith(WAL_SUFFIX)) {
                 return FileType.WAL;
-            } else if (p.toString().endsWith(L2_INDEX_SUFFIX)) {
+            } else if (pathStr.endsWith(L2_INDEX_SUFFIX)) {
                 return FileType.L2INDEX;
-            } else if (p.toString().endsWith(L3_INDEX_SUFFIX)) {
+            } else if (pathStr.endsWith(L3_INDEX_SUFFIX)) {
                 return FileType.L3INDEX;
             } else {
                 return FileType.TMP;
@@ -152,22 +153,24 @@ public class EngineImpl implements Engine {
 
         //this is not working.
         Map<FileType, List<Path>> fileMap;
+
         try (Stream<Path> files = Files.walk(dataDir)) {
-            fileMap = files.filter(
-                    e -> e.toString().endsWith(WAL_SUFFIX)
-                            || e.toString().endsWith(L2_INDEX_SUFFIX)
-                            || e.toString().endsWith(L3_INDEX_SUFFIX)
-                            || e.toString().endsWith(TMP_SUFFIX))
-                    .collect(Collectors.groupingBy(fileTypeMapper, Collectors.toList()));
+            fileMap = files.filter(e -> {
+                final String pathStr = e.toString();
+                return pathStr.endsWith(WAL_SUFFIX)
+                        || pathStr.endsWith(L2_INDEX_SUFFIX)
+                        || pathStr.endsWith(L3_INDEX_SUFFIX)
+                        || pathStr.endsWith(TMP_SUFFIX);
+            }).collect(Collectors.groupingBy(fileTypeMapper, Collectors.toList()));
 
         } catch (IOException e) {
             //no need to cleanup
             throw new InitialisationException(e);
         }
 
-        List<BaseTask> tasks = getTasks(fileMap);
+        List<BaseTask> tasks = getBootTasks(fileMap);
 
-        log.debug(tasks + " tasks to load at boot.");
+        log.debug("tasks to load at boot: {}", tasks);
         if (tasks.size() > 0) {
             int parallelism = cfg.getBootParallelism();
             boolean errInInit = false;
@@ -180,8 +183,8 @@ public class EngineImpl implements Engine {
                 ex.shutdown();
                 try {
                     ex.awaitTermination(600, TimeUnit.SECONDS);
-                    log.info("Processed all boot files.");
-                } catch (InterruptedException e) {
+                    log.info("Processed all boot tasks...");
+                } catch (final InterruptedException e) {
                     errInInit = true;
                 }
                 if (errInInit || ex.didWeErr()) {
@@ -198,9 +201,10 @@ public class EngineImpl implements Engine {
                 });
             }
         }
+
         //if there is even a single WAL, mutableTable is set
         if (mutableTable == null) {
-            log.debug("setting mutable memtable");
+            log.debug("setting mutable memtable.");
             mutableTable = newTable(Instant.now().toEpochMilli());
             mutableTable.load();
         }
@@ -239,7 +243,7 @@ public class EngineImpl implements Engine {
      * if(size full){
      * tryLock();
      * //for 1st guy, go and create new table, others can exit knowing someone is there,
-     * even if below fails, someone will detect size full and start again
+     * even if below fails, someone will detect size full next time and start again
      * if lock succeeds:
      * // create new memtable with numsegemnts from cfg.
      * // get curr memtable
@@ -257,7 +261,7 @@ public class EngineImpl implements Engine {
     @Override
     public void put(byte[] k, byte[] v) throws IOException {
         if (state == State.TERMINATED || state == State.TERMINATING) {
-            throw new InvalidDBStateException("Terminated");
+            throw new InvalidDBStateException("DB is Terminated");
         }
         if (writesStalled()) {
             throw new WritesStalledException();
@@ -327,8 +331,8 @@ public class EngineImpl implements Engine {
         state = State.TERMINATED;
     }
 
-    private List<BaseTask> getTasks(Map<FileType, List<Path>> m) {
-        List<BaseTask> tasks = new ArrayList<>();
+    private List<BaseTask> getBootTasks(final Map<FileType, List<Path>> m) {
+        final List<BaseTask> tasks = new ArrayList<>();
         m.forEach((t, p) -> {
             switch (t) {
                 case TMP:
@@ -348,21 +352,21 @@ public class EngineImpl implements Engine {
         return tasks;
     }
 
-    private List<BaseTask> getTmpFileTasks(List<Path> paths) {
-        List<BaseTask> tasks = new ArrayList<>();
-        paths.forEach(p -> tasks.add(new FileCleanupTask(p, log)));
+    private List<BaseTask> getTmpFileTasks(final List<Path> paths) {
+        final List<BaseTask> tasks = new ArrayList<>();
+        paths.forEach(p -> tasks.add(new FileCleanupTask(p)));
         return tasks;
     }
 
-    private List<BaseTask> getMemtableTasks(List<Path> paths) {
+    private List<BaseTask> getMemtableTasks(final List<Path> paths) {
         //we have all WAL segment files here, need to partition it.
         Function<Path, Long> segmentMapper =
                 p -> {
-                    log.debug("getMemtableTasks: p is " + p.getFileName().toString().split("\\."));
+                    log.debug("getMemtableTasks: p is {}", p.getFileName().toString().split("\\."));
                     return Long.valueOf(p.getFileName().toString().split("\\.")[0]);
                 };
 
-        List<BaseTask> tasks = new ArrayList<>();
+        final List<BaseTask> tasks = new ArrayList<>();
 
         Map<Long, List<Path>> walToSegments = paths.stream()
                 .collect(Collectors.groupingBy(segmentMapper, Collectors.toList()));
@@ -370,7 +374,7 @@ public class EngineImpl implements Engine {
         //the highest timestamp wal becomes mutable
         long highestTS = Collections.max(walToSegments.keySet());
         walToSegments.forEach((ts, p) -> {
-            MemTable m = newTable(ts, p.size());
+            final MemTable m = newTable(ts, p.size());
             tasks.add(new LoadableTask(m, log));
             if (highestTS == ts) {
                 log.info("setting: " + ts + " as mutable table");
@@ -389,14 +393,14 @@ public class EngineImpl implements Engine {
     private MemTable newTable(long ts, int numSeg) {
         Segment[] segs = new Segment[numSeg];
         for (int i = 0; i < numSeg; ++i) {
-            segs[i] = new Segment(Paths.get(dataDir.toString() + "/" + ts + "." + i + "." + "wal"), cfg.getSync(), log);
+            segs[i] = new Segment(Paths.get(dataDir.toString() + "/" + ts + "." + i + "." + "wal"), cfg.getSync());
         }
         return new MemTableImpl(new WalImpl(ts, segs, log), ts, log);
     }
 
     private List<BaseTask> getL2IndexTasks(List<Path> paths) {
         return paths.stream().map(p -> {
-            Loadable l = new IndexImpl.IndexLoader(p);
+            final Loadable l = new IndexImpl.IndexLoader(p);
             return new LoadableTask<Index>(l, log, l2Indexes::add);
         }).collect(Collectors.toList());
     }

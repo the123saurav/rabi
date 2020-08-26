@@ -6,7 +6,6 @@ import com.rabi.internal.exceptions.InvalidCheckpointException;
 import org.slf4j.Logger;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -14,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /*
   TODO: add CRC event.
   Think about multi writes, do we need to worry about
-  write to WAL, i dont think so as long as we dont specify offset to write.
+  write to WAL, i don't think so as long as we don't specify offset to write.
   The syscalls are always atomic and we dont need to keep track of offset.
 
   THINK about using mem outside Heap for GC overhead skipping.
@@ -28,6 +27,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
   Note that each memtable is backed by one WAL which can have many segments.
   This allows flushing to unlink the WAL after flush.
+
+  Having multiple threads(segments) writing to same underlying disk can be faster if not using sync mode
+  as then writes are just write to OS's page cache.
  */
 public class WalImpl implements Wal {
 
@@ -45,22 +47,27 @@ public class WalImpl implements Wal {
     }
 
     @Override
-    public List<Entry> load() {
+    public List<Record> load() {
         log.debug("loading WAL: " + ts);
-        List<Entry> entries = new ArrayList<>();
-        for (Segment s : segments) {
+        final List<Record> records = new ArrayList<>();
+        for (final Segment s : segments) {
             try {
-                entries.addAll(s.load());
+                records.addAll(s.load());
             } catch (IOException e) {
                 throw new InitialisationException(e);
             }
         }
-        return entries;
+        return records;
     }
 
     @Override
-    public long appendPut(byte[] k, byte[] v) throws IOException {
-        long vTime = next.incrementAndGet();
+    public long appendPut(final byte[] k, final byte[] v) throws IOException {
+        /*
+         vTime is used for ordering across segments during load.
+         As can be seen the ordering is when we wrote to WAL and not when the operation
+         returned to caller.
+         */
+        final long vTime = next.incrementAndGet();
         /*
         now at this point all concurrent threads have a distinct
         value.

@@ -24,6 +24,7 @@ import static com.rabi.internal.db.engine.util.FileUtils.atomicWrite;
  *
  * DataImpl deals with boot
  * Format:
+ * <version> (1)
  * <8><8><m><n>
  *
  * It provides interfaces for:
@@ -45,17 +46,17 @@ public class DataImpl implements Data {
 
     /**
      *
-     * flush operation could be slow as it not in hot path, should not affect GC much.
-     * flush checks if we have disk and inodes available so that we don't fail while writing and end in
-     * inconsistent state. It creates a batch of entries to be flushed and
+     * flush operation could be slow as it not in hot path, but should not affect GC much.
+     * It creates a batch of records to be flushed and
      * then preallocates that length.
-     * @param entries - list of values to append to file.
+     * 
+     * @param records - list of values to append to file.
      */
-    public void flush(List<Pair<byte[], byte[]>> entries) throws IOException {
+    public void flush(final List<Pair<byte[], byte[]>> records) throws IOException {
         //TODO: think about direct buffers
-        ByteBuffer b = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
+        final ByteBuffer b = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
 
-        Set<OpenOption> opts = new HashSet<>(Arrays.asList(StandardOpenOption.CREATE, StandardOpenOption.APPEND));
+        final Set<OpenOption> opts = new HashSet<>(Arrays.asList(StandardOpenOption.CREATE, StandardOpenOption.APPEND));
         {
             if (syncMode) {
                 opts.add(StandardOpenOption.DSYNC);
@@ -63,22 +64,23 @@ public class DataImpl implements Data {
         }
         //We are not allocating disk space here, so it grows after 128KB. We can optimise it.
         // RAF.setLength creates sparse file and hence doesn't guarantee disk space.
-        try(FileChannel ch = FileChannel.open(path, opts)){
+        try(final FileChannel ch = FileChannel.open(path, opts)){
             /*
-            To guarantee atomic writes(which OS doesnt provide as no FS is transational),
+            To guarantee atomic writes(which OS doesn't provide as no FS is transactional),
             we can do 2 things:
-            - check free disk space and inodes in partition before every write, again this is not fullproof with small
+            - check free disk space and inodes in partition before every write, again this is not foolproof with small
               race window.
             - actually write 0s to the file(we can use this approach to preallocate too), this is the best guarantee
               as we are actually allocating space.
              */
-            for(final Pair<byte[], byte[]> e: entries){
+            for(final Pair<byte[], byte[]> r: records){
                 // data file has only PUT values.
-                if(e.getRight() != null) {
-                    b.put(new Entry(e.getLeft(), e.getRight()).serialize());
+                if(r.getRight() != null) {
+                    b.put(new Record(r.getLeft(), r.getRight()).serialize());
                     if (b.remaining() < MAX_ENTRY_SIZE_BYTES) {
                         b.flip();
                         log.info("writing to data file: {} bytes", b.limit());
+                        // TODO: Do we need this given we create .tmp file?
                         atomicWrite(ch, b);
                         b.rewind();
                     }
