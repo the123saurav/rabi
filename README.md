@@ -14,4 +14,9 @@ This project uses maven for builds.
 Requirements:
 - maven CLI(tested with 3.6.2)
 - Java 8
+
+# Style Convention
+We follow [google style guide](https://google.github.io/styleguide/javaguide.html). The corresponding checksyles config
+can be found in config dir. You can use the file with your preferred ide e.g this can be imported in "code styles: java"
+config in intellij.
     

@@ -1,7 +1,7 @@
 package com.rabi.exceptions;
 
 public class ShutdownException extends RuntimeException {
-    public ShutdownException(Exception e) {
-        super(e);
-    }
+  public ShutdownException(Exception e) {
+    super(e);
+  }
 }

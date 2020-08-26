@@ -1,27 +1,26 @@
 package com.rabi.internal.db.engine;
 
-import org.apache.commons.lang3.tuple.Pair;
-
 import java.io.IOException;
 import java.util.List;
+import org.apache.commons.lang3.tuple.Pair;
 
 public interface MemTable extends Loadable<Void> {
 
-    long size();
+  long size();
 
-    void put(byte[] k, byte[] v) throws IOException;
+  void put(byte[] k, byte[] v) throws IOException;
 
-    void delete(byte[] k) throws IOException;
+  void delete(byte[] k) throws IOException;
 
-    void allowMutation();
+  void allowMutation();
 
-    void disallowMutation();
+  void disallowMutation();
 
-    void close() throws IOException;
+  void close() throws IOException;
 
-    List<Pair<byte[], byte[]>> export();
+  List<Pair<byte[], byte[]>> export();
 
-    long getId();
+  long getId();
 
-    void cleanup() throws IOException;
+  void cleanup() throws IOException;
 }
