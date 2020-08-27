@@ -20,7 +20,6 @@ public final class DBFactory {
    * @param dataDir - directory for all rabi data
    * @param logger  - logger
    * @return DB instance which needs to be opened.
-   * <p>
    */
   public static DB getInstance(@Nonnull final String dataDir, @Nonnull final Logger logger) {
     return DBImpl.get(dataDir, logger);

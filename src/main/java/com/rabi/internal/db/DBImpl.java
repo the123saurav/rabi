@@ -16,7 +16,6 @@ import org.slf4j.Logger;
  * The Stats class is also part of DB engine(should that be part of DBImpl and updates are sent to
  * it via queue just to fasten it up, maybe in future). DBEngine would have
  * state and it will reject calls to it unless running.
- * <p>
  */
 
 public final class DBImpl implements DB {
