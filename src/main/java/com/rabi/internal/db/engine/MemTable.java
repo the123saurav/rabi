@@ -10,6 +10,8 @@ public interface MemTable extends Loadable<Void> {
 
   void put(byte[] k, byte[] v) throws IOException;
 
+  byte[] get(byte[] k);
+
   void delete(byte[] k) throws IOException;
 
   void allowMutation();

@@ -139,6 +139,14 @@ public class MemTableImpl implements MemTable {
   }
 
   @Override
+  public byte[] get(final byte[] k) {
+    final ByteArrayWrapper b = new ByteArrayWrapper(k);
+    // TODO(samdgupi) return nullable construct
+    Value v = m.get(b);
+    return v == null ? new byte[] {} : v.val;
+  }
+
+  @Override
   public void delete(final byte[] k) throws IOException {
     final long vtime = wal.appendDelete(k);
     final ByteArrayWrapper b = new ByteArrayWrapper(k);

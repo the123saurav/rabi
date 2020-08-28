@@ -11,6 +11,8 @@ public interface Engine {
 
   void put(byte[] k, byte[] v) throws IOException;
 
+  byte[] get(byte[] k);
+
   void delete(byte[] k) throws IOException;
 
   void shutdown() throws IOException;
