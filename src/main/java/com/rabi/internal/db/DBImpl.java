@@ -76,7 +76,7 @@ public final class DBImpl implements DB {
     }
     //note that engine might not have initialised here, but we let engine handle that.
     //call engine here
-    return new byte[0];
+    return engine.get(k);
   }
 
   @Override

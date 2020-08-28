@@ -41,7 +41,7 @@ public class DefaultTest {
     });
     assertDoesNotThrow(() -> testDB.put(validKey, value));
     // TODO(samdgupi) This is a stub right now as get is not implemented
-    assertArrayEquals(new byte[0], testDB.get(validKey));
+    assertArrayEquals(value, testDB.get(validKey));
     assertArrayEquals(new byte[0], testDB.get(invalidKey));
   }
 }
