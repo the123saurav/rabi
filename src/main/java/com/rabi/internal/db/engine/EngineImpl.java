@@ -362,6 +362,7 @@ public class EngineImpl implements Engine {
    * 4. load l3 index(parallelism upto number of L3 files)
    * 5. start runtime routines
    * The engine first gathers number of independent tasks.
+   *
    * <p>
    * Note that only 1,2,3,4 are in purview of parallelism.
    */
@@ -535,6 +536,21 @@ public class EngineImpl implements Engine {
         mutLock.unlock();
       }
     }
+  }
+
+  // TODO(samdgupi) This is a very basic implementation of get with inefficent
+  // lookup. It will be optimized in later diffs. Thread safety is not also
+  // managed currently.
+  @Override
+  public byte[] get(byte[] k) {
+    byte[] val = mutableTable.get(k);
+    // TODO(samdgupi) use nullable value here
+    if (val.length != 0) {
+      return val;
+    }
+    // TODO(samdgupi) add searching immutablemaps
+    // TODO(samdgupi) add searching l2 and l3 indexes
+    return new byte[] {};
   }
 
   @Override
