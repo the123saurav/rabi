@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 public class LoadableTask<T> extends BaseTask {
 
   private final Logger log;
-  private final Loadable task;
+  private final Loadable<T> task;
   private Consumer<T> callback;
 
   public LoadableTask(Loadable<T> t, Logger l) {
@@ -24,7 +24,7 @@ public class LoadableTask<T> extends BaseTask {
   @Override
   public void run() {
     log.debug("Running LoadableTask: " + task);
-    T t = (T) task.load();
+    T t = task.load();
     if (callback != null) {
       callback.accept(t);
     }
