@@ -7,19 +7,19 @@ import java.util.concurrent.TimeUnit;
 
 public class HaltingFixedThreadPoolExecutor extends ThreadPoolExecutor {
 
-    private volatile boolean didErr;
+  private volatile boolean didErr;
 
-    public HaltingFixedThreadPoolExecutor(int nThreads, ThreadFactory t) {
-        super(nThreads, nThreads,
-                0L, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<>(),
-                t);
-    }
+  public HaltingFixedThreadPoolExecutor(int nThreads, ThreadFactory t) {
+    super(nThreads, nThreads,
+        0L, TimeUnit.MILLISECONDS,
+        new LinkedBlockingQueue<>(),
+        t);
+  }
 
-    protected void afterExecute(Runnable r, Throwable t) {
-        super.afterExecute(r, t);
-        //Futures swallow exception and hence t would be null. Uncomment below when
-        // we submit callables.
+  protected void afterExecute(Runnable r, Throwable t) {
+    super.afterExecute(r, t);
+    //Futures swallow exception and hence t would be null. Uncomment below when
+    // we submit callables.
           /*if (t == null && r instanceof Future<?>) {
             try {
               Object result = ((Future<?>) r).get();
@@ -32,16 +32,16 @@ public class HaltingFixedThreadPoolExecutor extends ThreadPoolExecutor {
                 Thread.currentThread().interrupt(); // ignore/reset
             }
           }*/
-        if (t != null) {
-            didErr = true;
-            // Error in any task should shut down the executor.
-            if (!isTerminating()) {
-                shutdown();
-            }
-        }
+    if (t != null) {
+      didErr = true;
+      // Error in any task should shut down the executor.
+      if (!isTerminating()) {
+        shutdown();
+      }
     }
+  }
 
-    public boolean didWeErr() {
-        return didErr;
-    }
+  public boolean didWeErr() {
+    return didErr;
+  }
 }

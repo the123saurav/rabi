@@ -12,17 +12,18 @@ import javax.annotation.Nonnull;
  */
 public final class DBFactory {
 
-    private DBFactory() {}
+  private DBFactory() {
+  }
 
-    /**
-     * There can be multiple db instance in an app each identified by a data-dir.
-     *
-     * @param dataDir - directory for all rabi data
-     * @param logger  - logger
-     * @return DB instance which needs to be opened.
-     * <p>
-     */
-    public static DB getInstance(@Nonnull final String dataDir, @Nonnull final Logger logger) {
-        return DBImpl.get(dataDir, logger);
-    }
+  /**
+   * There can be multiple db instance in an app each identified by a data-dir.
+   *
+   * @param dataDir - directory for all rabi data
+   * @param logger  - logger
+   * @return DB instance which needs to be opened.
+   * <p>
+   */
+  public static DB getInstance(@Nonnull final String dataDir, @Nonnull final Logger logger) {
+    return DBImpl.get(dataDir, logger);
+  }
 }
