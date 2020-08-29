@@ -1,6 +1,10 @@
 package com.rabi.internal.db.engine.data;
 
 import com.rabi.internal.db.engine.Data;
+import com.rabi.internal.db.engine.Index;
+import com.rabi.internal.db.engine.Bootable;
+import com.rabi.internal.db.engine.index.IndexImpl;
+import com.rabi.internal.db.engine.util.FileUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,11 +41,21 @@ public class DataImpl implements Data {
     private static final int MAX_ENTRY_SIZE_BYTES = 65794;
     private static final Logger log = LoggerFactory.getLogger(DataImpl.class);
     private Path path;
-    private final boolean syncMode;
+    private final long id;
 
-    public DataImpl(Path p, boolean sm){
+    public DataImpl(final Path p, final long i){
         path = p;
-        syncMode = sm;
+        id = i;
+    }
+
+    @Override
+    public long getID() {
+        return id;
+    }
+
+    @Override
+    public Path getPath() {
+        return path;
     }
 
     /**
@@ -52,7 +66,7 @@ public class DataImpl implements Data {
      * 
      * @param records - list of values to append to file.
      */
-    public void flush(final List<Pair<byte[], byte[]>> records) throws IOException {
+    public void flush(final List<Pair<byte[], byte[]>> records, boolean syncMode) throws IOException {
         //TODO: think about direct buffers
         final ByteBuffer b = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
 
@@ -94,11 +108,28 @@ public class DataImpl implements Data {
         }
     }
 
-    public void rename(Path n) throws IOException {
+    public void rename(final Path n) throws IOException {
+        log.info("Renaming {} to {}", path, n);
         path = Files.move(path, n);
     }
 
     public byte[] getValue(long offset){
         return null;
+    }
+
+    public static class DataBooter implements Bootable<Data> {
+        private final Path p;
+
+        public DataBooter(final Path p) {
+            this.p = p;
+        }
+
+        @Override
+        public Data boot() {
+            log.info("Booting data file at: {}", p);
+            long id = FileUtils.getId(p);
+            final Data d = new DataImpl(p, id);
+            return d;
+        }
     }
 }

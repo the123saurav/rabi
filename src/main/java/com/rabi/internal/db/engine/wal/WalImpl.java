@@ -33,14 +33,14 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class WalImpl implements Wal {
 
-    private final long ts;
+    private final long id;
     private final Segment[] segments;
     private final AtomicLong next;
     private final Logger log;
     private boolean closed = false;
 
     public WalImpl(long t, Segment[] segs, Logger logger) {
-        ts = t;
+        id = t;
         next = new AtomicLong();
         segments = segs;
         log = logger;
@@ -48,7 +48,7 @@ public class WalImpl implements Wal {
 
     @Override
     public List<Record> load() {
-        log.debug("loading WAL: " + ts);
+        log.debug("loading WAL: " + id);
         final List<Record> records = new ArrayList<>();
         for (final Segment s : segments) {
             try {

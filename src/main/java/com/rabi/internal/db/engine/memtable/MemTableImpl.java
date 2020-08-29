@@ -64,7 +64,7 @@ public class MemTableImpl implements MemTable {
         numOps = new AtomicLong();
     }
 
-    public Void load() {
+    public Void boot() {
 
         List<Record> records;
         try {

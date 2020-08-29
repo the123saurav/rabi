@@ -6,29 +6,29 @@ import com.rabi.exceptions.InitialisationException;
 import com.rabi.exceptions.InvalidDBStateException;
 import com.rabi.exceptions.WritesStalledException;
 import com.rabi.internal.db.Engine;
-import com.rabi.internal.db.engine.channel.Message;
-import com.rabi.internal.db.engine.channel.message.EngineToFlusher;
-import com.rabi.internal.db.engine.channel.message.FlusherToEngine;
-import com.rabi.internal.db.engine.flusher.FlusherImpl;
+import com.rabi.internal.db.engine.data.DataImpl;
 import com.rabi.internal.db.engine.index.IndexImpl;
 import com.rabi.internal.db.engine.memtable.MemTableImpl;
 import com.rabi.internal.db.engine.task.boot.BaseTask;
 import com.rabi.internal.db.engine.task.boot.FileCleanupTask;
 import com.rabi.internal.db.engine.task.boot.LoadableTask;
+import com.rabi.internal.db.engine.util.AppUtils;
+import com.rabi.internal.db.engine.util.FileUtils;
 import com.rabi.internal.db.engine.util.HaltingFixedThreadPoolExecutor;
 import com.rabi.internal.db.engine.wal.Segment;
 import com.rabi.internal.db.engine.wal.WalImpl;
+import com.rabi.internal.types.ByteArrayWrapper;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -43,11 +43,12 @@ public class EngineImpl implements Engine {
     private final static String WAL_SUFFIX = ".wal";
     private final static String L2_INDEX_SUFFIX = ".l2.index";
     private final static String L3_INDEX_SUFFIX = ".l3.index";
-    private final static String DATA_SUFFIX = ".data";
+    private final static String L2_DATA_SUFFIX = "l2.data";
+    private final static String L3_DATA_SUFFIX = "l3.data";
     private final static String TMP_SUFFIX = ".tmp";
 
     private enum FileType {
-        WAL, DATA, L2INDEX, L3INDEX, TMP
+        WAL, L2DATA, L2INDEX, L3DATA, L3INDEX, TMP
     }
 
     private final Path dataDir;
@@ -56,27 +57,255 @@ public class EngineImpl implements Engine {
     private final long maxKeys;
     private final ReentrantLock mutLock;
     private final ConcurrentLinkedDeque<MemTable> immutableTables;
-    private final List<Index> l2Indexes;
-    private final List<Index> l3Indexes;
+    private final Map<Long, Index> l2Indexes;
+    private final Map<Long, Data> l2Data;
+    private final Map<Long, Index> l3Indexes;
+    private final Map<Long, Data> l3Data;
     private final BlockingQueue<EngineToFlusher> toFlusher;
-    private final BlockingQueue<Message> fromFlusher;
+    private final BlockingQueue<EngineToCompactor> toCompactor;
+    private final BlockingQueue<Message> messageBus;
 
-    private class MessageListener implements Runnable {
+    private static class FlusherToEngine extends Message {
+        private final Index index;
+
+        FlusherToEngine(Index i){
+            index = i;
+        }
+
+        Index getIndex(){
+            return index;
+        }
+    }
+
+    private class EngineToFlusher extends Message {
+        private final MemTable m;
+
+        EngineToFlusher(MemTable m){
+            this.m = m;
+        }
+
+        MemTable getMemTable(){
+            return m;
+        }
+
+        boolean getSyncMode(){ return cfg.getSync(); }
+
+        Path getDataDir(){ return dataDir; }
+    }
+
+    private static class CompactorToEngine extends Message {}
+
+    private static class EngineToCompactor extends Message {}
+
+     private class Flusher implements Runnable {
+        private final Logger log = LoggerFactory.getLogger(Flusher.class);
 
         @Override
         public void run() {
-            log.info("Starting engine EventListener...");
+            log.info("Flusher started.");
+            EngineToFlusher msg;
+            while (true) {
+                try {
+                    msg = toFlusher.take(); //block for task
+                    log.info("Got request to flush memtable.");
+                    // engine adds the index and removes immutable table.
+                    final Index i = doFlush(msg.getMemTable(), msg.getDataDir(), msg.getSyncMode());
+                    log.info("Flushed memtable to disk at: {}", i.getPath());
+                    messageBus.add(new FlusherToEngine(i));
+                } catch (InterruptedException e) {
+                    log.info("Shutting down routine...");
+                    return;
+                }
+            }
+        }
+
+        //TODO: add expo backoff
+        private Index doFlush(final MemTable m, final Path dataDir, final boolean syncMode) throws InterruptedException {
+            while (true){
+                try {
+                    return flush(m, dataDir, syncMode);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        /**
+         * - get exported entryset
+         * - create tmp data and index file
+         * - dump to above file in batches
+         * - create index file
+         * - rename .tmp
+         */
+        private Index flush(final MemTable m, final Path dataDir, final boolean syncMode) throws IOException {
+            final long id = m.getId();
+            final List<Pair<byte[], byte[]>> recordSet = m.export();
+            log.info("Flushing memtable: {} with {} records", id, m.size());
+            final Data d = flushDataFile(recordSet, dataDir, id, syncMode);
+            final Index i = flushIndexFile(recordSet, dataDir, id, syncMode);
+            d.rename(Paths.get(dataDir.toString() + "/" + id + ".l2.data"));
+            i.rename(Paths.get(dataDir.toString() + "/" + id + ".l2.index"));
+            log.info("Renamed data and index files after flush");
+            return i;
+        }
+
+        private Data flushDataFile(final List<Pair<byte[], byte[]>> recordSet,
+                                   final Path dataDir, final long id, final boolean syncMode) throws IOException {
+            final Path p = Paths.get(dataDir.toString() + "/" + id + ".l2.data.tmp");
+            log.info("Data file path during flush would be: {}", p);
+            final Data d = new DataImpl(p, FileUtils.getId(p));
+            d.flush(recordSet, syncMode);
+            log.info("Flushed datafile {} to {}", id, p);
+            return d;
+        }
+
+        private Index flushIndexFile(final List<Pair<byte[], byte[]>> entries, Path dataDir, long id, boolean syncMode) throws IOException {
+            byte[] tmp = new byte[256];
+            Arrays.fill(tmp, (byte)255);
+            ByteArrayWrapper minKey = new ByteArrayWrapper(tmp);
+            ByteArrayWrapper maxKey = new ByteArrayWrapper(new byte[]{(byte)0});
+            long minKeyOffset = 0;
+            long maxKeyOffset = 0;
+            Map<ByteArrayWrapper, Long> m = new HashMap<>();
+            ByteArrayWrapper k;
+            long fileOffset = 0;
+            long currOffset;
+
+            for(final Pair<byte[], byte[]> e: entries){
+                k = new ByteArrayWrapper(e.getLeft());
+                currOffset = 0;
+                if(e.getRight() != null) {
+                    currOffset = fileOffset;
+                    fileOffset += 1 + 2 + e.getLeft().length + e.getRight().length;
+                    //minkey/maxkey is one of the keys in data file
+                    if (k.compareTo(minKey) <= 0) {
+                        minKey = k;
+                        minKeyOffset = currOffset;
+                    }
+                    if (k.compareTo(maxKey) >= 0) {
+                        maxKey = k;
+                        maxKeyOffset = currOffset;
+                    }
+                }
+                m.put(k, currOffset);
+            }
+            final Path indexPath = Paths.get(dataDir.toString() + "/" + id + ".l2.index.tmp");
+            log.info("Index file path upon flush would be: {}", indexPath);
+            final long indexId = FileUtils.getId(indexPath);
+            final Index i = IndexImpl.loadedIndex(indexPath, indexId, m, minKey.unwrap(),
+                    minKeyOffset, maxKey.unwrap(), maxKeyOffset);
+            i.flush(syncMode);
+            return i;
+        }
+    }
+
+    /**
+     * The compactor would remove one L2index.
+     * It will also update the L3indexes which is okay as we are not changing
+     * any references.
+     * Note that serving reads from L3 target files is okay when compaction is running as
+     * the only keys that are updated in the index(we look into index for answering reads)
+     * are from L2 candidate's file and hence if any query comes for these, they would be answered by L2 file only and
+     * not come to L3.
+     * For any other key, the L3 index would be unaffected and so would be the data file where we are only appending,
+     * so all existing offsets, as seen in the L3 index, are valid.
+     */
+    private class Compactor implements Runnable {
+        private final Logger log = LoggerFactory.getLogger(Compactor.class);
+
+        @Override
+        public void run() {
+            log.info("Compactor started.");
+            while (true) {
+                try {
+                    toCompactor.take(); //block for task
+                    log.info("Got request to compact");
+                    // engine adds the index and removes immutable table.
+                    int n  = compact();
+                    log.info("Done compacting {} files", n);
+                    messageBus.add(new CompactorToEngine());
+                } catch (InterruptedException e) {
+                    log.info("Shutting down routine...");
+                    return;
+                } catch (IOException e) {
+                    throw new RuntimeException("Error in compaction", e);
+                }
+            }
+        }
+
+        private int compact() throws IOException {
+            int n = 0;
+            while(l2Indexes.size() > cfg.getMaxFlushedFiles()) {
+                if (l3Indexes.size() == 0) {
+                    log.info("No file in L3, using simple compaction strategy.");
+                    final Pair<Data, Index> candidatePair = getHighestDensityL2File();
+                    final Index candidateIndex = candidatePair.getRight();
+                    final Data candidateData = candidatePair.getLeft();
+                    String currPath = candidateIndex.getPath().toString();
+                    int l = currPath.lastIndexOf('/');
+                    String head = currPath.substring(0, l) + "/";
+                    String tail = currPath.substring(l + 1);
+                    String newPath = head + tail.replace(".l2.", ".l3.");
+                    try {
+                        candidateIndex.lockAndSignal();
+                        candidateIndex.rename(Paths.get(newPath));
+                        currPath = candidateData.getPath().toString();
+                        l = currPath.lastIndexOf('/');
+                        head = currPath.substring(0, l) + "/";
+                        tail = currPath.substring(l + 1);
+                        newPath = head + tail.replace(".l2.", ".l3.");
+                        candidateData.rename(Paths.get(newPath));
+                        l3Indexes.put(candidateIndex.getId(), candidateIndex);
+                        l3Data.put(candidateData.getID(), candidateData);
+                        l2Indexes.remove(candidateIndex.getId());
+                        l2Data.remove(candidateData.getID());
+                        n++;
+                    } finally {
+                        candidateIndex.unlockAndSignal();
+                    }
+                } else {
+                    log.info("Using regular compaction strategy");
+                    // TODO
+                }
+            }
+            return n;
+        }
+
+        private Pair<Data, Index> getHighestDensityL2File() {
+            double maxDensity = Double.MIN_VALUE;
+            Index maxDensityIndex = null;
+
+            for(final Index i: l2Indexes.values()) {
+                if(i.getDensity() > maxDensity) {
+                    maxDensity = i.getDensity();
+                    maxDensityIndex = i;
+                }
+            }
+            final Data maxDensityData = l2Data.get(maxDensityIndex.getId());
+            return new ImmutablePair<>(maxDensityData, maxDensityIndex);
+        }
+    }
+
+
+        private class MessageListener implements Runnable {
+
+        @Override
+        public void run() {
+            log.info("Starting engine MessageListener...");
             while (true) {
                 Message m;
                 try {
-                    m = fromFlusher.take();
-                } catch (InterruptedException e) {
+                    m = messageBus.take();
+                } catch (final InterruptedException e) {
                     log.warn("EventListener interrupted, exiting...");
                     return;
                 }
                 if(m instanceof FlusherToEngine){
                     try {
                         handleFlusherMessage((FlusherToEngine)m);
+                        if(l2Indexes.size() > cfg.getMaxFlushedFiles()) {
+                            toCompactor.add(new EngineToCompactor());
+                        }
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
@@ -84,12 +313,12 @@ public class EngineImpl implements Engine {
             }
         }
 
-        private void handleFlusherMessage(FlusherToEngine e) throws IOException {
+        private void handleFlusherMessage(final FlusherToEngine e) throws IOException {
             log.info("received message from Flusher: {}", e.getIndex());
-            l2Indexes.add(e.getIndex());
-            MemTable m = immutableTables.getLast();
+            l2Indexes.put(e.getIndex().getId(), e.getIndex());
+            final MemTable m = immutableTables.getLast();
             immutableTables.removeLast();
-            log.info("removing wal");
+            log.info("removing wal for flushed memtable");
             m.cleanup();
         }
     }
@@ -98,6 +327,7 @@ public class EngineImpl implements Engine {
     private volatile State state;
     private volatile MemTable mutableTable;
     private Thread flusher;
+    private Thread compactor;
     private Thread eventListener;
 
     public EngineImpl(String dDir, Config cfg, Logger logger) {
@@ -108,10 +338,13 @@ public class EngineImpl implements Engine {
         this.maxKeys = cfg.getMemtableMaxKeys();
         this.mutLock = new ReentrantLock();
         this.immutableTables = new ConcurrentLinkedDeque<>();
-        this.l2Indexes = new ArrayList<>();
-        this.l3Indexes = new ArrayList<>();
+        this.l2Indexes = new HashMap<>();
+        this.l2Data = new HashMap<>();
+        this.l3Indexes = new HashMap<>();
+        this.l3Data = new HashMap<>();
         this.toFlusher = new LinkedBlockingQueue<>();
-        this.fromFlusher = new LinkedBlockingQueue<>();
+        this.toCompactor = new LinkedBlockingQueue<>();
+        this.messageBus = new LinkedBlockingQueue<>();
         logger.debug("memtable max keys: " + this.maxKeys);
     }
 
@@ -146,6 +379,10 @@ public class EngineImpl implements Engine {
                 return FileType.L2INDEX;
             } else if (pathStr.endsWith(L3_INDEX_SUFFIX)) {
                 return FileType.L3INDEX;
+            } else if(pathStr.endsWith(L2_DATA_SUFFIX)) {
+                return FileType.L2DATA;
+            } else if(pathStr.endsWith(L3_DATA_SUFFIX)) {
+                return FileType.L3DATA;
             } else {
                 return FileType.TMP;
             }
@@ -160,6 +397,8 @@ public class EngineImpl implements Engine {
                 return pathStr.endsWith(WAL_SUFFIX)
                         || pathStr.endsWith(L2_INDEX_SUFFIX)
                         || pathStr.endsWith(L3_INDEX_SUFFIX)
+                        || pathStr.endsWith(L2_DATA_SUFFIX)
+                        || pathStr.endsWith(L3_DATA_SUFFIX)
                         || pathStr.endsWith(TMP_SUFFIX);
             }).collect(Collectors.groupingBy(fileTypeMapper, Collectors.toList()));
 
@@ -206,18 +445,27 @@ public class EngineImpl implements Engine {
         if (mutableTable == null) {
             log.debug("setting mutable memtable.");
             mutableTable = newTable(Instant.now().toEpochMilli());
-            mutableTable.load();
+            mutableTable.boot();
         }
 
         //start runtime routines below
         eventListener = new Thread(new MessageListener());
-        flusher = new Thread(new FlusherImpl(toFlusher, fromFlusher));
-
         eventListener.start();
+
+        flusher = new Thread(new Flusher());
         flusher.start();
         if(immutableTables.size() > 0){
-            toFlusher.add(new EngineToFlusher(immutableTables.getLast(), cfg.getSync(), dataDir));
+            log.info("Signalling flusher");
+            toFlusher.add(new EngineToFlusher(immutableTables.getLast()));
         }
+
+        compactor = new Thread(new Compactor());
+        compactor.start();
+        if(l2Indexes.size() > cfg.getMaxFlushedFiles()) {
+            log.info("Signalling compactor");
+            toCompactor.add(new EngineToCompactor());
+        }
+
         this.state = State.RUNNING;
         log.info("Engine is running now.");
     }
@@ -233,7 +481,7 @@ public class EngineImpl implements Engine {
      * @return
      */
     private boolean writesStalled() {
-        return immutableTables.size() >= cfg.getMaxMemtables() || l2Indexes.size() >= cfg.getMaxFlushedFiles();
+        return immutableTables.size() >= cfg.getMaxMemtables() || l2Indexes.size() > cfg.getMaxFlushedFiles();
     }
 
     /**
@@ -273,11 +521,11 @@ public class EngineImpl implements Engine {
             if(mutableTable.size() > maxKeys) { //DCL
                 log.info("memtable full, rotating.");
                 MemTable newTable = newTable(Instant.now().toEpochMilli());
-                newTable.load(); //creates segments
+                newTable.boot(); //creates segments
                 immutableTables.add(mutableTable);
                 mutableTable = newTable;
                 log.info("signalling flusher...");
-                toFlusher.add(new EngineToFlusher(immutableTables.getLast(), cfg.getSync(), dataDir));
+                toFlusher.add(new EngineToFlusher(immutableTables.getLast()));
                 mutLock.unlock();
             }
         }
@@ -298,7 +546,7 @@ public class EngineImpl implements Engine {
                 if (mutableTable.size() > maxKeys) {
                     log.debug("memtable full, rotating.");
                     MemTable newTable = newTable(Instant.now().toEpochMilli());
-                    newTable.load(); //creates segments
+                    newTable.boot(); //creates segments
                     immutableTables.add(mutableTable);
                     mutableTable = newTable;
                 }
@@ -346,6 +594,12 @@ public class EngineImpl implements Engine {
                     break;
                 case L3INDEX:
                     tasks.addAll(getL3IndexTasks(p));
+                    break;
+                case L2DATA:
+                    tasks.addAll(getL2DataTasks(p));
+                    break;
+                case L3DATA:
+                    tasks.addAll(getL3DataTasks(p));
                     break;
             }
         });
@@ -400,15 +654,29 @@ public class EngineImpl implements Engine {
 
     private List<BaseTask> getL2IndexTasks(List<Path> paths) {
         return paths.stream().map(p -> {
-            final Loadable l = new IndexImpl.IndexLoader(p);
-            return new LoadableTask<Index>(l, log, l2Indexes::add);
+            final Bootable l = new IndexImpl.IndexLoader(p);
+            return new LoadableTask<Index>(l, log, i -> l2Indexes.put(i.getId(), i));
         }).collect(Collectors.toList());
     }
 
     private List<BaseTask> getL3IndexTasks(List<Path> paths) {
         return paths.stream().map(p -> {
-            Loadable l = new IndexImpl.IndexLoader(p);
-            return new LoadableTask<Index>(l, log, l3Indexes::add);
+            Bootable l = new IndexImpl.IndexLoader(p);
+            return new LoadableTask<Index>(l, log, i -> l3Indexes.put(i.getId(), i));
+            }).collect(Collectors.toList());
+    }
+
+    private List<BaseTask> getL2DataTasks(final List<Path> paths) {
+        return paths.stream().map(p -> {
+            final Bootable l = new DataImpl.DataBooter(p);
+            return new LoadableTask<Data>(l, log, d -> l2Data.put(d.getID(), d));
+        }).collect(Collectors.toList());
+    }
+
+    private List<BaseTask> getL3DataTasks(final List<Path> paths) {
+        return paths.stream().map(p -> {
+            final Bootable l = new DataImpl.DataBooter(p);
+            return new LoadableTask<Data>(l, log, d -> l3Data.put(d.getID(), d));
         }).collect(Collectors.toList());
     }
 }

@@ -2,7 +2,9 @@ package com.rabi.internal.db.engine.index;
 
 import com.rabi.exceptions.InitialisationException;
 import com.rabi.internal.db.engine.Index;
-import com.rabi.internal.db.engine.Loadable;
+import com.rabi.internal.db.engine.Bootable;
+import com.rabi.internal.db.engine.util.AppUtils;
+import com.rabi.internal.db.engine.util.FileUtils;
 import com.rabi.internal.types.ByteArrayWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +17,7 @@ import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static com.rabi.internal.db.engine.util.FileUtils.atomicWrite;
 
@@ -29,7 +32,7 @@ import static com.rabi.internal.db.engine.util.FileUtils.atomicWrite;
  *
  * <key_len><key><offset>
  * 1  +       m +   8
- * <p>
+ * </p>
  * Deleted keys are also present in index with offset as 0.
  */
 public class IndexImpl implements Index {
@@ -40,6 +43,9 @@ public class IndexImpl implements Index {
     private final static Logger log = LoggerFactory.getLogger(IndexImpl.class);
 
     private Path path;
+    private final long id;
+    private volatile boolean shouldLock; // this lock is turned on by comapctor
+    private final ReentrantLock lock;
     private Map<ByteArrayWrapper, Long> map;
     private byte[] minKey;
     private long minKeyOffset;
@@ -47,8 +53,11 @@ public class IndexImpl implements Index {
     private long maxKeyOffset;
     private long totalKeys;
 
-    private IndexImpl() {
+    private IndexImpl(final Path p, final long i) {
+        path = p;
+        id = i;
         map = new HashMap<>();
+        lock = new ReentrantLock();
     }
 
     /**
@@ -56,17 +65,19 @@ public class IndexImpl implements Index {
      *
      * @return
      */
-    public static IndexImpl emptyIndex() {
-        return new IndexImpl();
+    public static IndexImpl emptyIndex(final Path p, final long id) {
+        return new IndexImpl(p, id);
     }
 
     public static IndexImpl loadedIndex(
+            final Path p,
+            final long id,
             final Map<ByteArrayWrapper, Long> m,
             final byte[] minKey,
             final long minKeyOffset,
             final byte[] maxKey,
             final long maxKeyOffset) {
-        final IndexImpl i = emptyIndex();
+        final IndexImpl i = emptyIndex(p, id);
         i.map = m;
         i.minKeyOffset = minKeyOffset;
         i.maxKeyOffset = maxKeyOffset;
@@ -84,6 +95,7 @@ public class IndexImpl implements Index {
         minKeyOffset = h.getMinKeyOffset();
         maxKeyOffset = h.getMaxKeyOffset();
         totalKeys = h.getTotalKeys();
+        log.info("Index file at {} has {} keys", path, totalKeys);
     }
 
     private void loadRecords(final FileChannel ch) throws IOException {
@@ -109,10 +121,10 @@ public class IndexImpl implements Index {
             }
             loadBuffer.mark();
         }
+        log.info("Loaded {} records to memory for index {}", map.size(), path);
     }
 
-    public void load(final Path p) {
-        path = p;
+    public void load() {
         try (final FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
             loadHeader(ch);
             loadRecords(ch);
@@ -121,20 +133,44 @@ public class IndexImpl implements Index {
         }
     }
 
+
+    @Override
+    public long getId() {
+        return id;
+    }
+
+    @Override
+    public Path getPath() {
+        return path;
+    }
+
     @Override
     public void put(byte[] key, long offset) {
+        if(shouldLock){
 
+        }
     }
 
     @Override
     public long get(byte[] k) {
+        if(shouldLock){
+            try {
+                lock.lock();
+                return doGet(k);
+            } finally {
+                lock.unlock();
+            }
+        }
+        return doGet(k);
+    }
+
+    private long doGet(byte[] k){
         Long l = map.get(k);
         return l == null ? -1 : l;
     }
 
     @Override
-    public void overwrite(final Path p, final boolean syncMode) throws IOException {
-        path = p;
+    public void flush(final boolean syncMode) throws IOException {
         //create header, dump, in loop create entry and dump
 
         //TODO: think about direct buffers
@@ -166,14 +202,14 @@ public class IndexImpl implements Index {
                 b.put(new Record(e.getKey().unwrap(), e.getValue()).serialize());
                 if (b.remaining() < MAX_ENTRY_SIZE_BYTES) {
                     b.flip();
-                    log.info("writing chunk to index file: {} bytes", b.limit());
+                    log.debug("writing chunk to index file: {} bytes", b.limit());
                     atomicWrite(ch, b);
                     b.rewind();
                 }
             }
             if(b.position() > 0) {
                 b.flip();
-                log.info("writing last chunk to index file: {} bytes", b.limit());
+                log.debug("writing last chunk to index file: {} bytes", b.limit());
                 atomicWrite(ch, b);
             }
         }
@@ -184,17 +220,38 @@ public class IndexImpl implements Index {
         path = Files.move(path, n);
     }
 
-    public static class IndexLoader implements Loadable<Index> {
+    @Override
+    public void lockAndSignal() {
+        shouldLock = true;
+        lock.lock();
+    }
+
+    @Override
+    public void unlockAndSignal() {
+        lock.unlock();
+        shouldLock = false;
+    }
+
+    @Override
+    public double getDensity() {
+        long range = AppUtils.findRange(minKey, maxKey, 3);
+        return (double)range / totalKeys;
+    }
+
+    public static class IndexLoader implements Bootable<Index> {
+        private static final Logger log = LoggerFactory.getLogger(IndexLoader.class);
         private final Path p;
 
-        public IndexLoader(Path p) {
+        public IndexLoader(final Path p) {
             this.p = p;
         }
 
         @Override
-        public Index load() {
-            final IndexImpl i = emptyIndex();
-            i.load(p);
+        public Index boot() {
+            log.info("Booting index file at: {}", p);
+            long id = FileUtils.getId(p);
+            final IndexImpl i = emptyIndex(p, id);
+            i.load();
             return i;
         }
     }

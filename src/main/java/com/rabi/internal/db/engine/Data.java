@@ -11,7 +11,11 @@ import java.util.List;
  */
 public interface Data {
 
-    void flush(List<Pair<byte[], byte[]>> e) throws IOException;
+    long getID();
+
+    Path getPath();
+
+    void flush(List<Pair<byte[], byte[]>> e, boolean syncMode) throws IOException;
 
     void rename(Path n) throws IOException;
 }

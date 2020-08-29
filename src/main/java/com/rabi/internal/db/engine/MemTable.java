@@ -5,7 +5,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import java.io.IOException;
 import java.util.List;
 
-public interface MemTable extends Loadable<Void> {
+public interface MemTable extends Bootable<Void> {
 
     long size();
 

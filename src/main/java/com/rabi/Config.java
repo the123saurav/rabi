@@ -86,11 +86,11 @@ public final class Config implements Cloneable {
 
     public static final class ConfigBuilder {
 
-        private static final long DEFAULT_MEMTABLE_MAX_KEYS = 100000;
+        private static final long DEFAULT_MEMTABLE_MAX_KEYS = 1000;
         private static final short DEFAULT_BOOT_PARALLELISM = 1;
         private static final int MAX_MEMTABLE_SEGMENTS = 16;
         private static final int DEFAULT_MEMTABLE_SEGMENTS = 4;
-        private static final int MEMTABLE_MINIMUM_MAX_KEYS = 100000;
+        private static final int MEMTABLE_MINIMUM_MAX_KEYS = 1000;
         private static final boolean DEFAULT_FILE_SYNC = false;
         private static final ShutdownMode DEFAULT_SHUTDOWN_MODE = ShutdownMode.GRACEFUL;
 

@@ -22,7 +22,7 @@ public class FileCleanupTask extends BaseTask {
 
     @Override
     public void run() {
-        LOG.debug("[FileCleanupTask] deleting file: " + file);
+        LOG.info("deleting file: " + file);
         //doesn't work for directories.
         try {
             Files.delete(file);

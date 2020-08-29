@@ -66,7 +66,7 @@ public class FilterImpl implements Filter {
     }
 
     @Override
-    public Void load() {
+    public Void boot() {
         try (FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
             loadHeader(ch);
             f = BloomFilter.create(
