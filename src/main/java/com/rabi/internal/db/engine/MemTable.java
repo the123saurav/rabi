@@ -11,6 +11,8 @@ public interface MemTable extends Bootable<Void> {
 
   void put(byte[] k, byte[] v) throws IOException;
 
+  byte[] get(byte[] k);
+
   void delete(byte[] k) throws IOException;
 
   void allowMutation();
