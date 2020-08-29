@@ -40,37 +40,37 @@ import java.util.Map;
 //TODO think if we need this public
 public final class Stats {
 
-    //maybe use counters, snapshot classes
-    private Snapshot<Integer> numImmutableMemtables;
-    private Snapshot<Integer> mutableMemtableSizeBytes;
-    private Snapshot<Integer>[] immutableMemtablesSizeBytes;
-    private Snapshot<Integer> walCheckPointBacklog;
-    private Snapshot<Integer> numL2Files;
-    private Snapshot<Integer> numL3Files;
-    private Snapshot<LocalDateTime> lastCompactionStart;
-    private Snapshot<Duration> lastCompactionDurationMs;
-    private Counter numCompactions;
-    private Quantum numCompactionsInLastHour;
-    private Snapshot<LocalDateTime> lastRebalanceStart;
-    private Snapshot<Integer> lastRebalanceDurationMs;
-    private Counter numRebalances;
-    private Quantum numRebalancesInLastHour;
-    private Snapshot<LocalDateTime> lastFlushStart;
-    private Snapshot<Integer> lastFlushDurationMs;
-    private Counter numFlushes;
-    private Quantum numFlushesInLastHour;
+  //maybe use counters, snapshot classes
+  private Snapshot<Integer> numImmutableMemtables;
+  private Snapshot<Integer> mutableMemtableSizeBytes;
+  private Snapshot<Integer>[] immutableMemtablesSizeBytes;
+  private Snapshot<Integer> walCheckPointBacklog;
+  private Snapshot<Integer> numL2Files;
+  private Snapshot<Integer> numL3Files;
+  private Snapshot<LocalDateTime> lastCompactionStart;
+  private Snapshot<Duration> lastCompactionDurationMs;
+  private Counter numCompactions;
+  private Quantum numCompactionsInLastHour;
+  private Snapshot<LocalDateTime> lastRebalanceStart;
+  private Snapshot<Integer> lastRebalanceDurationMs;
+  private Counter numRebalances;
+  private Quantum numRebalancesInLastHour;
+  private Snapshot<LocalDateTime> lastFlushStart;
+  private Snapshot<Integer> lastFlushDurationMs;
+  private Counter numFlushes;
+  private Quantum numFlushesInLastHour;
 
-    private Logger log;
+  private Logger log;
 
-    //No need to ensure singleton as this is not public class.
-    public Stats(Logger logger) {
-        log = logger;
-    }
+  //No need to ensure singleton as this is not public class.
+  public Stats(Logger logger) {
+    log = logger;
+  }
 
-    Map<String, String> pull() {
-        Map<String, String> m = new HashMap<>();
-        //convert to map.
-        return m;
-    }
+  Map<String, String> pull() {
+    Map<String, String> m = new HashMap<>();
+    //convert to map.
+    return m;
+  }
 
 }

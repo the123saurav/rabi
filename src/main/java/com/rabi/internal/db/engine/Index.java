@@ -5,21 +5,21 @@ import java.nio.file.Path;
 
 public interface Index {
 
-    long getId();
+  long getId();
 
-    Path getPath();
+  Path getPath();
 
-    void put(byte[] key, long offset);
+  void put(byte[] key, long offset);
 
-    long get(byte[] k);
+  long get(byte[] k);
 
-    void flush(boolean syncMode) throws IOException;
+  void flush(boolean syncMode) throws IOException;
 
-    void rename(Path n) throws IOException;
+  void rename(Path n) throws IOException;
 
-    void lockAndSignal();
+  void lockAndSignal();
 
-    void unlockAndSignal();
+  void unlockAndSignal();
 
-    double getDensity();
+  double getDensity();
 }

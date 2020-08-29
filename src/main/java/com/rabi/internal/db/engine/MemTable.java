@@ -7,21 +7,21 @@ import java.util.List;
 
 public interface MemTable extends Bootable<Void> {
 
-    long size();
+  long size();
 
-    void put(byte[] k, byte[] v) throws IOException;
+  void put(byte[] k, byte[] v) throws IOException;
 
-    void delete(byte[] k) throws IOException;
+  void delete(byte[] k) throws IOException;
 
-    void allowMutation();
+  void allowMutation();
 
-    void disallowMutation();
+  void disallowMutation();
 
-    void close() throws IOException;
+  void close() throws IOException;
 
-    List<Pair<byte[], byte[]>> export();
+  List<Pair<byte[], byte[]>> export();
 
-    long getId();
+  long getId();
 
-    void cleanup() throws IOException;
+  void cleanup() throws IOException;
 }
