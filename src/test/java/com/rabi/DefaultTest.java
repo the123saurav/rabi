@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
  * TODO(samdgupi): Better naming and also add some e2e like tests
  */
 public class DefaultTest {
-  static Logger testLogger = LoggerFactory.getLogger(TestConfig.LOGGER_NAME);
+  private static final Logger testLogger = LoggerFactory.getLogger(DefaultTest.class);
 
   /**
    * testPutAndGet will test basic put and get operation.
@@ -31,12 +31,11 @@ public class DefaultTest {
     byte[] value = "value".getBytes();
     byte[] invalidKey = "invalid".getBytes();
 
-    DB testDB = DBFactory.getInstance(tempDir.toString(), testLogger);
-    Config.ConfigBuilder configBuilder = new Config.ConfigBuilder();
-
+    final DB testDB = DBFactory.getInstance(tempDir.toString(), testLogger);
+    final Config.ConfigBuilder configBuilder = new Config.ConfigBuilder();
 
     assertDoesNotThrow(() -> {
-      CompletableFuture<Void> isOpen = testDB.open(configBuilder.build());
+      final CompletableFuture<Void> isOpen = testDB.open(configBuilder.build());
       isOpen.get(TestConfig.OPEN_TIMEOUT_SEC, TimeUnit.SECONDS);
     });
     assertDoesNotThrow(() -> testDB.put(validKey, value));

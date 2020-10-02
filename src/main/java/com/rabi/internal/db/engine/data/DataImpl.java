@@ -93,7 +93,7 @@ public class DataImpl implements Data {
           b.put(new Record(r.getLeft(), r.getRight()).serialize());
           if (b.remaining() < MAX_ENTRY_SIZE_BYTES) {
             b.flip();
-            log.info("writing to data file: {} bytes", b.limit());
+            log.debug("writing to data file: {} bytes", b.limit());
             // TODO: Do we need this given we create .tmp file?
             atomicWrite(ch, b);
             b.rewind();
@@ -102,7 +102,7 @@ public class DataImpl implements Data {
       }
       if (b.position() > 0) {
         b.flip();
-        log.info("writing last chunk to data file: {} bytes", b.limit());
+        log.debug("writing last chunk to data file: {} bytes", b.limit());
         atomicWrite(ch, b);
       }
     }
