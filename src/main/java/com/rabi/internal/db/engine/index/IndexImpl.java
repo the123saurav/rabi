@@ -175,9 +175,8 @@ public class IndexImpl implements Index {
     //create header, dump, in loop create entry and dump
 
     //TODO: think about direct buffers
-    ByteBuffer b = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
 
-    Set<OpenOption> opts = new HashSet<>(Arrays.asList(StandardOpenOption.CREATE, StandardOpenOption.WRITE));
+    final Set<OpenOption> opts = new HashSet<>(Arrays.asList(StandardOpenOption.CREATE, StandardOpenOption.WRITE));
     {
       if (syncMode) {
         opts.add(StandardOpenOption.DSYNC);
@@ -186,10 +185,10 @@ public class IndexImpl implements Index {
     //We are not allocating disk space here, so it grows after 128KB. We can optimise it.
     // RAF.setLength creates sparse file and hence doesn't guarantee disk space.
     try (FileChannel ch = FileChannel.open(path, opts)) {
-      b = new Header(map.size(), minKeyOffset, maxKeyOffset).serialize();
-      log.info("writing header to index file: {} bytes", b.limit());
-      atomicWrite(ch, b);
-      b.rewind();
+      final ByteBuffer headerBuffer = new Header(map.size(), minKeyOffset, maxKeyOffset).serialize();
+      log.info("writing header to index file: {} bytes", headerBuffer.limit());
+      atomicWrite(ch, headerBuffer);
+      //b.rewind();
             /*
             To guarantee atomic writes(which OS doesn't provide as no FS is transactional),
             we can do 2 things:
@@ -198,20 +197,23 @@ public class IndexImpl implements Index {
             - actually write 0s to the file(we can use this approach to preallocate too), this is the best guarantee
               as we are actually allocating space.
              */
+      final ByteBuffer bodyBuffer = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
+
       for (Map.Entry<ByteArrayWrapper, Long> e : map.entrySet()) {
         // index file has PUT and DELETE values.
-        b.put(new Record(e.getKey().unwrap(), e.getValue()).serialize());
-        if (b.remaining() < MAX_ENTRY_SIZE_BYTES) {
-          b.flip();
-          log.debug("writing chunk to index file: {} bytes", b.limit());
-          atomicWrite(ch, b);
-          b.rewind();
+        bodyBuffer.put(new Record(e.getKey().unwrap(), e.getValue()).serialize());
+        if (bodyBuffer.remaining() < MAX_ENTRY_SIZE_BYTES) {
+          bodyBuffer.flip();
+          log.debug("writing chunk to index file: {} bytes", bodyBuffer.limit());
+          atomicWrite(ch, bodyBuffer);
+          // bodyBuffer.rewind();
+          bodyBuffer.clear();
         }
       }
-      if (b.position() > 0) {
-        b.flip();
-        log.debug("writing last chunk to index file: {} bytes", b.limit());
-        atomicWrite(ch, b);
+      if (bodyBuffer.position() > 0) {
+        bodyBuffer.flip();
+        log.debug("writing last chunk to index file: {} bytes", bodyBuffer.limit());
+        atomicWrite(ch, bodyBuffer);
       }
     }
   }

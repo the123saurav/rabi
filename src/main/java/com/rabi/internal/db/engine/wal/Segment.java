@@ -119,10 +119,12 @@ public class Segment {
 
   void close() throws IOException {
     if (!sync) {
+      LOG.info("Flushing segment");
       writer.force(true);
     }
-
+    LOG.info("Closing Segment");
     writer.close(); //idempotent
+    LOG.info("Closed Segment");
   }
 
   void renameToTmp() throws IOException {

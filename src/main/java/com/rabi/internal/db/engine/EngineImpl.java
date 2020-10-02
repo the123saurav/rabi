@@ -65,6 +65,13 @@ public class EngineImpl implements Engine {
   private final BlockingQueue<EngineToCompactor> toCompactor;
   private final BlockingQueue<Message> messageBus;
 
+  // mutables
+  private volatile State state;
+  private volatile MemTable mutableTable;
+  private Thread flusher;
+  private Thread compactor;
+  private Thread eventListener;
+
   private static class FlusherToEngine extends Message {
     private final Index index;
 
@@ -112,14 +119,14 @@ public class EngineImpl implements Engine {
       EngineToFlusher msg;
       while (true) {
         try {
-          msg = toFlusher.take(); //block for task
+          msg = toFlusher.take(); //block for task, checks interrupted flag and also responds to interrupted while sleeping and throws
           log.info("Got request to flush memtable.");
           // engine adds the index and removes immutable table.
           final Index i = doFlush(msg.getMemTable(), msg.getDataDir(), msg.getSyncMode());
           log.info("Flushed memtable to disk at: {}", i.getPath());
           messageBus.add(new FlusherToEngine(i));
-        } catch (InterruptedException e) {
-          log.info("Shutting down routine...");
+        } catch (final InterruptedException e) {
+          log.info("Shutting down flusher...");
           return;
         }
       }
@@ -230,8 +237,8 @@ public class EngineImpl implements Engine {
           int n = compact();
           log.info("Done compacting {} files", n);
           messageBus.add(new CompactorToEngine());
-        } catch (InterruptedException e) {
-          log.info("Shutting down routine...");
+        } catch (final InterruptedException e) {
+          log.info("Shutting down compactor...");
           return;
         } catch (IOException e) {
           throw new RuntimeException("Error in compaction", e);
@@ -328,13 +335,6 @@ public class EngineImpl implements Engine {
       m.cleanup();
     }
   }
-
-  // mutables
-  private volatile State state;
-  private volatile MemTable mutableTable;
-  private Thread flusher;
-  private Thread compactor;
-  private Thread eventListener;
 
   public EngineImpl(String dDir, Config cfg, Logger logger) {
     this.dataDir = Paths.get(dDir);
@@ -450,7 +450,7 @@ public class EngineImpl implements Engine {
 
     //if there is even a single WAL, mutableTable is set
     if (mutableTable == null) {
-      log.debug("setting mutable memtable.");
+      log.debug("Setting mutable memtable.");
       mutableTable = newTable(Instant.now().toEpochMilli());
       mutableTable.boot();
     }
@@ -526,12 +526,12 @@ public class EngineImpl implements Engine {
     mutableTable.put(k, v);
     if (mutableTable.size() > maxKeys && mutLock.tryLock()) {
       if (mutableTable.size() > maxKeys) { //DCL
-        log.info("memtable full, rotating.");
-        MemTable newTable = newTable(Instant.now().toEpochMilli());
+        log.info("memtable full with {} entries, rotating.", mutableTable.size());
+        final MemTable newTable = newTable(Instant.now().toEpochMilli());
         newTable.boot(); //creates segments
         immutableTables.add(mutableTable);
         mutableTable = newTable;
-        log.info("signalling flusher...");
+        log.info("Signalling flusher...");
         toFlusher.add(new EngineToFlusher(immutableTables.getLast()));
         mutLock.unlock();
       }
@@ -593,11 +593,15 @@ public class EngineImpl implements Engine {
     if (state == State.TERMINATED) {
       return;
     }
+    log.info("Shutting down engine");
     state = State.TERMINATING; //marker that somebody invoked shutdown
     mutableTable.close();
-    if (cfg.getShutdownMode() == Config.ShutdownMode.GRACEFUL) {
-
-    }
+    //if (cfg.getShutdownMode() == Config.ShutdownMode.GRACEFUL) {
+    log.info("Interrupting threads");
+    flusher.interrupt();
+    compactor.interrupt();
+    eventListener.interrupt();
+    //}
     state = State.TERMINATED;
   }
 
