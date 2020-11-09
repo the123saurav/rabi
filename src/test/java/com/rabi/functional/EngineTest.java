@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.rabi.Config;
 import com.rabi.DBFactory;
-import com.rabi.TestConfig;
 import com.rabi.Util;
 import com.rabi.internal.db.DBImpl;
 import com.rabi.internal.db.engine.EngineImpl;
@@ -19,6 +18,7 @@ import com.rabi.internal.db.engine.wal.Record;
 import com.rabi.internal.db.engine.wal.Segment;
 import com.rabi.internal.db.engine.wal.WalImpl;
 import com.rabi.internal.types.ByteArrayWrapper;
+import com.rabi.unit.TestConfig;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.file.Files;

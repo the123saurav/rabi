@@ -15,7 +15,17 @@ public interface Data {
 
   Path getPath();
 
+  long getSize();
+
+  void loadValues() throws IOException;
+
+  void offloadValues();
+
+  byte[] getValueForOffset(long offset);
+
   void flush(List<Pair<byte[], byte[]>> e, boolean syncMode) throws IOException;
 
   void rename(Path n) throws IOException;
+
+  void unlink();
 }

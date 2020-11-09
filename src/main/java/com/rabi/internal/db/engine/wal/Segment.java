@@ -82,10 +82,12 @@ public class Segment {
   private void makeWritable() throws IOException {
     LOG.debug("making segment file: " + path.getFileName() + " writable");
     if (sync) {
-      writer = FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.DSYNC);
+      writer = FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.DSYNC);
     } else {
-      writer = FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+      writer = FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
     }
+    // simulate append
+    writer.position(writer.size());
   }
 
   /**
@@ -100,6 +102,7 @@ public class Segment {
    * @throws IOException
    */
   void appendPut(byte[] k, byte[] v) throws IOException {
+    //TODO: USE safeAppend
     Record e = new Record(k, v, Instant.now().toEpochMilli());
     ByteBuffer payload = e.serialize();
     payload.rewind();
