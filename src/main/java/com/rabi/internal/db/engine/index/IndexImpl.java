@@ -6,6 +6,8 @@ import com.rabi.internal.db.engine.Bootable;
 import com.rabi.internal.db.engine.util.AppUtils;
 import com.rabi.internal.db.engine.util.FileUtils;
 import com.rabi.internal.types.ByteArrayWrapper;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +22,7 @@ import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 
 
-import static com.rabi.internal.db.engine.util.FileUtils.atomicWrite;
+import static com.rabi.internal.db.engine.util.FileUtils.safeAppend;
 
 /**
  * The file looks like:
@@ -51,13 +53,13 @@ public class IndexImpl implements Index {
   private byte[] minKey;
   private long minKeyOffset;
   private byte[] maxKey;
-  private long maxKeyOffset;
+  private long maxKeyOffset; // TODO: Do we need this?
   private long totalKeys;
 
   private IndexImpl(final Path p, final long i) {
     path = p;
     id = i;
-    map = new HashMap<>();
+    map = new ConcurrentHashMap<>();
     lock = new ReentrantLock();
   }
 
@@ -66,7 +68,7 @@ public class IndexImpl implements Index {
    *
    * @return
    */
-  public static IndexImpl emptyIndex(final Path p, final long id) {
+  static IndexImpl emptyIndex(final Path p, final long id) {
     return new IndexImpl(p, id);
   }
 
@@ -78,6 +80,8 @@ public class IndexImpl implements Index {
       final long minKeyOffset,
       final byte[] maxKey,
       final long maxKeyOffset) {
+    assert minKeyOffset >= 0;
+    assert maxKeyOffset >= 0;
     final IndexImpl i = emptyIndex(p, id);
     i.map = m;
     i.minKeyOffset = minKeyOffset;
@@ -88,6 +92,20 @@ public class IndexImpl implements Index {
     return i;
   }
 
+  public static IndexImpl fromIndex(final Index index) {
+    final IndexImpl old = (IndexImpl) index;
+    assert old.minKeyOffset >= 0;
+    assert old.maxKeyOffset >= 0;
+    final IndexImpl i = emptyIndex(index.getPath(), index.getId());
+    i.map = old.map;
+    i.minKeyOffset = old.minKeyOffset;
+    i.maxKeyOffset = old.maxKeyOffset;
+    i.totalKeys = old.map.size(); //check this is true
+    i.minKey = old.minKey;
+    i.maxKey = old.maxKey;
+    return i;
+  }
+
   private void loadHeader(final FileChannel ch) throws IOException {
     final ByteBuffer loadBuffer = ByteBuffer.allocate(Header.HEADER_LENGTH_BYTES);
     ch.read(loadBuffer); //maybe empty
@@ -95,8 +113,10 @@ public class IndexImpl implements Index {
     final Header h = Header.deserialize(loadBuffer);
     minKeyOffset = h.getMinKeyOffset();
     maxKeyOffset = h.getMaxKeyOffset();
+    assert minKeyOffset >= 0;
+    assert maxKeyOffset >= 0;
     totalKeys = h.getTotalKeys();
-    log.info("Index file at {} has {} keys", path, totalKeys);
+    log.info("Index file at {} has {} keys, minOffset: {}", new Object[] {path, totalKeys, minKeyOffset});
   }
 
   private void loadRecords(final FileChannel ch) throws IOException {
@@ -122,7 +142,7 @@ public class IndexImpl implements Index {
       }
       loadBuffer.mark();
     }
-    log.info("Loaded {} records to memory for index {}", map.size(), path);
+    log.info("Loaded {} records to memory for index {}, minKey {}", new Object[] {map.size(), path, new String(minKey, StandardCharsets.UTF_8)});
   }
 
   public void load() {
@@ -146,27 +166,82 @@ public class IndexImpl implements Index {
   }
 
   @Override
+  public void setPath(Path p) {
+    path = p;
+  }
+
+  @Override
+  public byte[] getMinKey() {
+    return minKey;
+  }
+
+  @Override
+  public long getMinKeyOffset() {
+    return minKeyOffset;
+  }
+
+  @Override
+  public long getMaxKeyOffset() {
+    return maxKeyOffset;
+  }
+
+  @Override
+  public void setMinKeyInfo(byte[] k, long offset) {
+    assert offset >= 0;
+    minKey = k;
+    minKeyOffset = offset;
+  }
+
+  @Override
+  public byte[] getMaxKey() {
+    return maxKey;
+  }
+
+  @Override
+  public void setMaxKeyInfo(byte[] k, long offset) {
+    assert offset >= 0;
+    maxKey = k;
+    maxKeyOffset = offset;
+  }
+
+  @Override
+  public long getTotalKeys() {
+    return map.size();
+  }
+
+  @Override
+  public void setTotalKeys(long t) {
+    totalKeys = t;
+  }
+
+  @Override
   public void put(byte[] key, long offset) {
     if (shouldLock) {
-
+      try {
+        lock.lock();
+        map.put(new ByteArrayWrapper(key), offset);
+      } finally {
+        lock.unlock();
+      }
     }
   }
 
   @Override
   public long get(byte[] k) {
+    final ByteArrayWrapper b = new ByteArrayWrapper(k);
     if (shouldLock) {
       try {
         lock.lock();
-        return doGet(k);
+        return doGet(b);
       } finally {
         lock.unlock();
       }
     }
-    return doGet(k);
+    return doGet(b);
   }
 
-  private long doGet(byte[] k) {
-    Long l = map.get(k);
+  private long doGet(final ByteArrayWrapper k) {
+    final Long l = map.get(k);
     return l == null ? -1 : l;
   }
 
@@ -175,7 +250,6 @@ public class IndexImpl implements Index {
     //create header, dump, in loop create entry and dump
 
     //TODO: think about direct buffers
-
     final Set<OpenOption> opts = new HashSet<>(Arrays.asList(StandardOpenOption.CREATE, StandardOpenOption.WRITE));
     {
       if (syncMode) {
@@ -185,41 +259,42 @@ public class IndexImpl implements Index {
     //We are not allocating disk space here, so it grows after 128KB. We can optimise it.
     // RAF.setLength creates sparse file and hence doesn't guarantee disk space.
     try (FileChannel ch = FileChannel.open(path, opts)) {
-      final ByteBuffer headerBuffer = new Header(map.size(), minKeyOffset, maxKeyOffset).serialize();
-      log.info("writing header to index file: {} bytes", headerBuffer.limit());
-      atomicWrite(ch, headerBuffer);
-      //b.rewind();
+      ByteBuffer b = new Header(map.size(), minKeyOffset, maxKeyOffset).serialize();
+      log.debug("writing header to index file: {} bytes", b.limit());
+      safeAppend(ch, b);
+      b = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
             /*
             To guarantee atomic writes(which OS doesn't provide as no FS is transactional),
             we can do 2 things:
             - check free disk space and inodes in partition before every write, again this is not fullproof with small
               race window.
-            - actually write 0s to the file(we can use this approach to preallocate too), this is the best guarantee
+            - actually write 0s to the file(we can use this approach to preallocate too), this is the better guarantee
               as we are actually allocating space.
              */
       final ByteBuffer bodyBuffer = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
 
       for (Map.Entry<ByteArrayWrapper, Long> e : map.entrySet()) {
         // index file has PUT and DELETE values.
-        bodyBuffer.put(new Record(e.getKey().unwrap(), e.getValue()).serialize());
-        if (bodyBuffer.remaining() < MAX_ENTRY_SIZE_BYTES) {
-          bodyBuffer.flip();
-          log.debug("writing chunk to index file: {} bytes", bodyBuffer.limit());
-          atomicWrite(ch, bodyBuffer);
-          // bodyBuffer.rewind();
-          bodyBuffer.clear();
+        b.put(new Record(e.getKey().unwrap(), e.getValue()).serialize());
+        if (b.remaining() < MAX_ENTRY_SIZE_BYTES) {
+          b.flip();
+          log.debug("writing chunk to index file: {} bytes", b.limit());
+          safeAppend(ch, b);
+          b.rewind();
         }
       }
-      if (bodyBuffer.position() > 0) {
-        bodyBuffer.flip();
-        log.debug("writing last chunk to index file: {} bytes", bodyBuffer.limit());
-        atomicWrite(ch, bodyBuffer);
+      if (b.position() > 0) {
+        b.flip();
+        log.debug("writing last chunk to index file: {} bytes", b.limit());
+        safeAppend(ch, b);
       }
     }
+    log.info("Flushed {} records to index {}", map.size(), path);
   }
 
   @Override
   public void rename(Path n) throws IOException {
+    log.info("Renaming index file {} to {}", path, n);
     path = Files.move(path, n);
   }
 
@@ -237,8 +312,22 @@ public class IndexImpl implements Index {
 
   @Override
   public double getDensity() {
-    long range = AppUtils.findRange(minKey, maxKey, 3);
+    long range = AppUtils.findByteRange(minKey, maxKey, 3);
     return (double) range / totalKeys;
+  }
+
+  @Override
+  public List<ByteArrayWrapper> getKeys() {
+    return new ArrayList<>(map.keySet());
+  }
+
+  @Override
+  public void unlink() {
+    try {
+      log.info("Removing index file: {}", path);
+      Files.delete(path);
+    } catch (IOException e) {
+    }
   }
 
   public static class IndexLoader implements Bootable<Index> {

@@ -5,12 +5,7 @@ import java.util.Arrays;
 
 public class AppUtils {
 
-  public static String reverse(final String in) {
-    String s = new StringBuffer(in).reverse().toString();
-    return s;
-  }
-
-  public static long findRange(byte[] a, byte[] b, int numBytes) {
+  public static long findByteRange(byte[] a, byte[] b, int numBytes) {
     numBytes = Math.min(7, Math.min(numBytes, Math.min(a.length, b.length)));
     a = Arrays.copyOf(a, numBytes);
     b = Arrays.copyOf(b, numBytes);
@@ -32,5 +27,16 @@ public class AppUtils {
       a[i--] = 0; //fill with 0s
     }
     return ByteBuffer.wrap(a).getLong(); // 7 byte array can always be accommodated in long
+  }
+
+  public static int compare(final byte[] left, final byte[] right) {
+    for (int i = 0, j = 0; i < left.length && j < right.length; i++, j++) {
+      int a = (left[i] & 0xff);
+      int b = (right[j] & 0xff);
+      if (a != b) {
+        return a - b;
+      }
+    }
+    return left.length - right.length;
   }
 }

@@ -21,6 +21,9 @@ public class Header {
     totalKeys = t;
     minKeyOffset = minoff;
     maxKeyOffset = maxOff;
+    assert minKeyOffset >= 0;
+    assert maxKeyOffset >= 0;
+    assert totalKeys >= 0;
   }
 
   long getMinKeyOffset() {
@@ -59,6 +62,8 @@ public class Header {
     long total = b.getLong();
     long minOff = b.getLong();
     long maxOff = b.getLong();
+    assert minOff >= 0;
+    assert maxOff >= 0;
     return new Header(total, minOff, maxOff);
   }
 }

@@ -37,7 +37,7 @@ public final class ByteArrayWrapper implements Comparable<ByteArrayWrapper> {
   }
 
   @Override
-  public int compareTo(ByteArrayWrapper o) {
+  public int compareTo(final ByteArrayWrapper o) {
     return UnsignedBytes.lexicographicalComparator().compare(data, o.data);
   }
 

@@ -13,9 +13,9 @@ public final class Config implements Cloneable {
 
   private static final int maxMemtables = 4;
 
-  private static final int maxFlushedFiles = 4;
+  private static final int maxFlushedFiles = 2;
 
-  private static final int minOrphanedKeysDuringCompaction = 100;
+  private static final int minOrphanedKeysDuringCompaction = 5;
 
   private static final int maxL3FileSizeMB = 1000;
 
@@ -51,6 +51,10 @@ public final class Config implements Cloneable {
 
   public int getMaxFlushedFiles() {
     return maxFlushedFiles;
+  }
+
+  public int getMinOrphanedKeysDuringCompaction() {
+    return minOrphanedKeysDuringCompaction;
   }
 
   public short getMemtableSegments() {
@@ -90,7 +94,7 @@ public final class Config implements Cloneable {
     private static final short DEFAULT_BOOT_PARALLELISM = 1;
     private static final int MAX_MEMTABLE_SEGMENTS = 16;
     private static final int DEFAULT_MEMTABLE_SEGMENTS = 4;
-    private static final int MEMTABLE_MINIMUM_MAX_KEYS = 1000;
+    private static final int MEMTABLE_MINIMUM_MAX_KEYS = 5;
     private static final boolean DEFAULT_FILE_SYNC = false;
     private static final ShutdownMode DEFAULT_SHUTDOWN_MODE = ShutdownMode.GRACEFUL;
 

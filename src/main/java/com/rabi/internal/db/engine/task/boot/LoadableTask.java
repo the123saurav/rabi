@@ -1,6 +1,8 @@
 package com.rabi.internal.db.engine.task.boot;
 
+import com.rabi.exceptions.InitialisationException;
 import com.rabi.internal.db.engine.Bootable;
+import java.io.IOException;
 import org.slf4j.Logger;
 
 import java.util.function.Consumer;
@@ -25,7 +27,12 @@ public class LoadableTask<T> extends BaseTask {
   @Override
   public void run() {
     log.debug("Running LoadableTask: " + task);
-    T t = (T) task.boot();
+    T t;
+    try {
+      t = (T) task.boot();
+    } catch (final IOException e) {
+      throw new InitialisationException(e);
+    }
     if (callback != null) {
       callback.accept(t);
     }
