@@ -15,7 +15,6 @@ import com.rabi.internal.db.engine.EngineImpl;
 import com.rabi.internal.db.engine.Index;
 import com.rabi.internal.db.engine.MemTable;
 import com.rabi.internal.db.engine.memtable.MemTableImpl;
-import com.rabi.internal.db.engine.task.boot.BaseTask;
 import com.rabi.internal.db.engine.wal.Record;
 import com.rabi.internal.db.engine.wal.Segment;
 import com.rabi.internal.db.engine.wal.WalImpl;
@@ -24,14 +23,9 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CompletableFuture;
@@ -42,7 +36,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -136,7 +129,7 @@ class EngineTest {
     Bombard with lots of PUTs from multiple threads.
     We will write 3.5 * MEMTABLE_MAX_KEYS keys and this should lead to:
     - (N>1) immutable tables and 1 mutable table with combined size as num keys.
-    -  N + 1 WALs with num records same as total keys and size of each WAL as memtable
+    - N + 1 WALs with num records same as total keys and size of each WAL as memtable
     - flusher signalled
      */
     final int totalKeys = (int) (3.5 * MEMTABLE_MAX_KEYS);
