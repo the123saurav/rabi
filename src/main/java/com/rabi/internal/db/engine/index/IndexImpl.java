@@ -271,8 +271,6 @@ public class IndexImpl implements Index {
             - actually write 0s to the file(we can use this approach to preallocate too), this is the better guarantee
               as we are actually allocating space.
              */
-      final ByteBuffer bodyBuffer = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
-
       for (Map.Entry<ByteArrayWrapper, Long> e : map.entrySet()) {
         // index file has PUT and DELETE values.
         b.put(new Record(e.getKey().unwrap(), e.getValue()).serialize());

@@ -81,7 +81,7 @@ public class FileUtils {
     long maxKeyOffset = 0;
     Map<ByteArrayWrapper, Long> m = new HashMap<>();
     ByteArrayWrapper k;
-    long fileOffset = 0;
+    long fileOffset = 8; // first 8 bytes are free
     long currOffset;
 
     for (final Pair<byte[], byte[]> e : entries) {

@@ -1,5 +1,11 @@
 package com.rabi;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.stream.Collectors;
+
 public final class Util {
 
   private Util() {
@@ -27,5 +33,12 @@ public final class Util {
       }
     }
     t.interrupt();
+  }
+
+  public static List<Path> getDiskArtifact(final Path dir, final long id, final String substr) throws IOException {
+    final String idStr = Long.toString(id);
+    return Files.walk(dir).filter(fp ->
+        fp.toString().contains(idStr) && fp.toString().contains(substr)
+    ).collect(Collectors.toList());
   }
 }

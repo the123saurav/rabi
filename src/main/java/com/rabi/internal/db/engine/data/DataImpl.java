@@ -65,7 +65,7 @@ public class DataImpl implements Data {
 
 
   /**
-   * flush operation could be slow as it not in hot path, but should not affect GC much.
+   * flush operation could be designed to slow by nature as it not in hot path, but should not affect GC much.
    * It creates a batch of records to be flushed and
    * then preallocates that length.
    *
@@ -92,8 +92,13 @@ public class DataImpl implements Data {
             - actually write 0s to the file(we can use this approach to preallocate too), this is the best guarantee
               as we are actually allocating space.
              */
+
       //simulate append
       ch.position(ch.size());
+      if (ch.position() == 0) {
+        log.info("Advancing data file {} to 8th byte", path);
+        ch.position(8);
+      }
       for (final Pair<byte[], byte[]> r : records) {
         // data file has only PUT values.
         if (r.getRight() != null) {
@@ -131,7 +136,7 @@ public class DataImpl implements Data {
   }
 
   public byte[] getValue(final long offset) {
-    return null;
+    return values.get(offset);
   }
 
   @Override
@@ -141,7 +146,8 @@ public class DataImpl implements Data {
     final ByteBuffer loadBuffer = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
     Record e;
     loadBuffer.mark();
-    long offset = 0;
+    long offset = 8;
+    ch.position(8);
     while (ch.read(loadBuffer) > 0) {
       loadBuffer.flip();// trim buffer to filled value
       while (loadBuffer.hasRemaining()) { // while we have not read whole buffer
