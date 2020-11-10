@@ -42,9 +42,9 @@ import org.slf4j.LoggerFactory;
  * During flushing we take an immutable memtable and convert it into L2 index and L2 data file.
  * It then notifies engine which updates its in memory structures.
  */
-class Flushing {
+class FlushingTest {
 
-  private static final Logger LOG = LoggerFactory.getLogger(Flushing.class);
+  private static final Logger LOG = LoggerFactory.getLogger(FlushingTest.class);
 
   /**
    * Here we open DB, disable compactor, then bombard with writes so that flushing is triggered.
