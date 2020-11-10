@@ -794,8 +794,7 @@ public class EngineImpl implements Engine {
       final long id = m.getId();
       final List<Pair<byte[], byte[]>> recordSet = m.export();
       log.info("Flushing memtable: {} with {} records", id, m.size());
-      Pair<Data, Index> flushed = flushLevelFiles(recordSet, dataDir, id, syncMode, "l2");
-      return flushed;
+      return flushLevelFiles(recordSet, dataDir, id, syncMode, "l2");
     }
   }
 
