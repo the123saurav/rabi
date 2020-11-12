@@ -730,10 +730,10 @@ public class EngineImpl implements Engine {
     }
   }
 
-  private static class CompactorToEngine extends Message {
+  public static class CompactorToEngine extends Message {
   }
 
-  private static class EngineToCompactor extends Message {
+  public static class EngineToCompactor extends Message {
   }
 
   private class EngineToFlusher extends Message {
@@ -880,6 +880,7 @@ public class EngineImpl implements Engine {
               targetDataOffsets.put(d.getID(), d.getSize());
             }
           }
+          log.debug("targetDataOffsets: {}", targetDataOffsets);
 
           if (isSubsetCase) {
             // there won't be any orphaned keys here
@@ -917,6 +918,7 @@ public class EngineImpl implements Engine {
                 }
               }
               if (orphan) {
+                log.info("Key: {} is orphan", new String(b.unwrap()));
                 orphanCount++;
                 if (currStreak == null) {
                   currStreak = new OrphanedKeysStreak(in);
@@ -930,17 +932,22 @@ public class EngineImpl implements Engine {
               }
               in++;
             }
+            if (currStreak != null) {
+              orphanedKeysStreaks.add(currStreak);
+            }
             log.info("Orphan keys count: {}", orphanCount);
+            log.debug("Orphaned keys: {}", orphanedKeysStreaks);
 
             final long minOrphanKeys = cfg.getMinOrphanedKeysDuringCompaction();
-            Iterator<OrphanedKeysStreak> it = orphanedKeysStreaks.iterator();
+            final Iterator<OrphanedKeysStreak> it = orphanedKeysStreaks.iterator();
             OrphanedKeysStreak oks;
-            List<Pair<byte[], byte[]>> recordsForStreak = new ArrayList<>();
+            final List<Pair<byte[], byte[]>> recordsForStreak = new ArrayList<>();
             while (it.hasNext()) {
               oks = it.next();
               if (oks.getStreak() > minOrphanKeys) {
                 // create new file
-                log.info("Creating new artifacts as num orphaned keys {} > minOrphanKeys {}", oks.getStreak(), minOrphanKeys);
+                log.info("Creating new artifacts as num orphaned keys {} > minOrphanKeys {}, start key: {}",
+                    oks.getStreak(), minOrphanKeys, new String(indexKeys.get(oks.keyOffset).unwrap()));
                 recordsForStreak.clear();
                 byte[] k;
                 for (int i = oks.getKeyOffset(); i < oks.getKeyOffset() + oks.getStreak(); i++) {
@@ -961,6 +968,7 @@ public class EngineImpl implements Engine {
               byte[] k;
               for (int i = mergeOks.getKeyOffset(); i < mergeOks.getKeyOffset() + mergeOks.getStreak(); i++) {
                 k = indexKeys.get(i).unwrap();
+                log.info("Trying to assign target for orphan {}", new String(k));
                 long min = Long.MAX_VALUE;
                 Index tIndex = null;
                 // try to find a target for this key
@@ -972,6 +980,7 @@ public class EngineImpl implements Engine {
                     tIndex = index;
                   }
                 }
+                log.info("For key {},target index is {}", new String(k), tIndex.getId());
                 assignToTarget(k, candidateIndex, candidateData, tIndex, toFlushRecords, targetDataOffsets);
               }
             }
@@ -979,12 +988,16 @@ public class EngineImpl implements Engine {
 
           // start appending to data files of target
           for (Map.Entry<Long, List<Pair<byte[], byte[]>>> entry : toFlushRecords.entrySet()) {
-            log.info("For target {}, {} entries to be flushed", entry.getKey(), entry.getValue());
+            log.info("For target {}, entries to be flushed are: ", entry.getKey());
+            entry.getValue().forEach(e -> log.info("{}", new String(e.getKey())));
             final Data d = l3Data.get(entry.getKey());
             d.flush(entry.getValue(), cfg.getSync());
+            d.offloadValues();
 
             //flush index
             final Index oldIndex = l3Indexes.get(entry.getKey());
+            log.info("Logging keys of l3 oldIndex:{}", oldIndex.getId());
+            oldIndex.getKeys().forEach(k -> log.info("{}", new String(k.unwrap())));
             byte[] minKey = oldIndex.getMinKey();
             byte[] maxKey = oldIndex.getMaxKey();
             long minKeyOffset = oldIndex.getMinKeyOffset();
@@ -1040,6 +1053,7 @@ public class EngineImpl implements Engine {
         targetDataOffsets.put(targetIndexID, offset + Record.getDiskSize(k,
             candidateData.getValueForOffset(candidateIndex.get(k))));
         targetIndex.put(k, offset);
+        log.info("Assigned key {} to offset {} of index {}", new String(k), offset, targetIndexID);
         toFlushRecords.computeIfAbsent(targetIndexID, f -> new ArrayList<>()).
             add(ImmutablePair.of(k, candidateData.getValueForOffset(candidateIndex.get(k))));
         //}
@@ -1113,6 +1127,11 @@ public class EngineImpl implements Engine {
 
       int getKeyOffset() {
         return keyOffset;
+      }
+
+      @Override
+      public String toString() {
+        return String.format("{%d, %d}", keyOffset, streak);
       }
     }
   }

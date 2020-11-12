@@ -11,13 +11,13 @@ public final class Config implements Cloneable {
     GRACEFUL, FAST
   }
 
-  private static final int maxMemtables = 4;
+  private static int maxMemtables = 4;
 
-  private static final int maxFlushedFiles = 2;
+  private static int maxFlushedFiles = 4;
 
-  private static final int minOrphanedKeysDuringCompaction = 5;
+  private static int minOrphanedKeysDuringCompaction = 100000;
 
-  private static final int maxL3FileSizeMB = 1000;
+  private static int maxL3FileSizeMB = 1000;
 
   private final long memtableMaxKeys;
 

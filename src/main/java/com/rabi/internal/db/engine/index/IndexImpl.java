@@ -142,7 +142,8 @@ public class IndexImpl implements Index {
       }
       loadBuffer.mark();
     }
-    log.info("Loaded {} records to memory for index {}, minKey {}", new Object[] {map.size(), path, new String(minKey, StandardCharsets.UTF_8)});
+    log.info("Loaded {} records to memory for index {}, minKey {}, maxKey {}", map.size(),
+        path, new String(minKey, StandardCharsets.UTF_8), new String(maxKey, StandardCharsets.UTF_8));
   }
 
   public void load() {
@@ -214,6 +215,9 @@ public class IndexImpl implements Index {
     totalKeys = t;
   }
 
+  /*
+  TODO: shouldLock is still prone to race and should be fixed.
+   */
   @Override
   public void put(byte[] key, long offset) {
     if (shouldLock) {
@@ -223,6 +227,8 @@ public class IndexImpl implements Index {
       } finally {
         lock.unlock();
       }
+    } else {
+      map.put(new ByteArrayWrapper(key), offset);
     }
   }
 
