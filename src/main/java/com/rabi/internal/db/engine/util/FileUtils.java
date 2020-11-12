@@ -54,8 +54,8 @@ public class FileUtils {
   public static Pair<Data, Index> flushLevelFiles(final List<Pair<byte[], byte[]>> recordSet,
                                                   final Path dataDir, final long id,
                                                   final boolean syncMode, final String level) throws IOException {
-    final Data d = flushDataFile(recordSet, dataDir, id, syncMode);
-    final Index i = flushIndexFile(recordSet, dataDir, id, syncMode);
+    final Data d = flushDataFile(recordSet, dataDir, id, syncMode, level);
+    final Index i = flushIndexFile(recordSet, dataDir, id, syncMode, level);
     d.rename(Paths.get(dataDir.toString() + "/" + id + "." + level + ".data"));
     i.rename(Paths.get(dataDir.toString() + "/" + id + "." + level + ".index"));
     log.info("Renamed data and index files after flush");
@@ -63,8 +63,9 @@ public class FileUtils {
   }
 
   private static Data flushDataFile(final List<Pair<byte[], byte[]>> recordSet,
-                                    final Path dataDir, final long id, final boolean syncMode) throws IOException {
-    final Path p = Paths.get(dataDir.toString() + "/" + id + ".l2.data.tmp");
+                                    final Path dataDir, final long id, final boolean syncMode,
+                                    final String level) throws IOException {
+    final Path p = Paths.get(dataDir.toString() + "/" + id + "." + level + ".data.tmp");
     log.debug("Data file path during flush would be: {}", p);
     final Data d = new DataImpl(p, FileUtils.getId(p), 0);
     d.flush(recordSet, syncMode);
@@ -72,7 +73,8 @@ public class FileUtils {
     return d;
   }
 
-  private static Index flushIndexFile(final List<Pair<byte[], byte[]>> entries, Path dataDir, long id, boolean syncMode) throws IOException {
+  private static Index flushIndexFile(final List<Pair<byte[], byte[]>> entries, Path dataDir, long id,
+                                      boolean syncMode, final String level) throws IOException {
     byte[] tmp = new byte[256];
     Arrays.fill(tmp, (byte) 255);
     ByteArrayWrapper minKey = new ByteArrayWrapper(tmp);
@@ -102,7 +104,7 @@ public class FileUtils {
       }
       m.put(k, currOffset);
     }
-    final Path indexPath = Paths.get(dataDir.toString() + "/" + id + ".l2.index.tmp");
+    final Path indexPath = Paths.get(dataDir.toString() + "/" + id + "." + level + ".index.tmp");
     log.debug("Index file path upon flush would be: {}", indexPath);
     final long indexId = FileUtils.getId(indexPath);
     final Index i = IndexImpl.loadedIndex(indexPath, indexId, m, minKey.unwrap(),

@@ -1,8 +1,13 @@
 package com.rabi;
 
+import com.rabi.internal.db.engine.Data;
+import com.rabi.internal.db.engine.Index;
+import com.rabi.internal.db.engine.data.DataImpl;
+import com.rabi.internal.db.engine.index.IndexImpl;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -27,7 +32,7 @@ public final class Util {
   public static void doInterruptThread(final Thread t) {
     if (!t.isAlive()) {
       try {
-        Thread.currentThread().sleep(500);
+        Thread.currentThread().sleep(2000);
       } catch (final InterruptedException e) {
         e.printStackTrace();
       }
@@ -35,10 +40,21 @@ public final class Util {
     t.interrupt();
   }
 
-  public static List<Path> getDiskArtifact(final Path dir, final long id, final String substr) throws IOException {
-    final String idStr = Long.toString(id);
-    return Files.walk(dir).filter(fp ->
-        fp.toString().contains(idStr) && fp.toString().contains(substr)
+  public static List<Path> getDiskArtifact(final Path dir, final String... subStrings) throws IOException {
+    return Files.walk(dir).filter(fp -> {
+          final String pathStr = fp.toString();
+          return Arrays.stream(subStrings).allMatch(pathStr::contains);
+        }
     ).collect(Collectors.toList());
+  }
+
+  public static Index loadIndexFromDisk(final Path p) {
+    return new IndexImpl.IndexLoader(p).boot();
+  }
+
+  public static Data loadDataFromDisk(final Path p) throws IOException {
+    final DataImpl data = (DataImpl) new DataImpl.DataBooter(p).boot();
+    data.loadValues();
+    return data;
   }
 }

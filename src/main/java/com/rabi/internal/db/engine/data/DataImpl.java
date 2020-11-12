@@ -60,7 +60,7 @@ public class DataImpl implements Data {
 
   @Override
   public long getSize() {
-    return 0;
+    return size;
   }
 
 

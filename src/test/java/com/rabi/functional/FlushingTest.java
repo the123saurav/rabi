@@ -1,5 +1,7 @@
 package com.rabi.functional;
 
+import static com.rabi.Util.loadDataFromDisk;
+import static com.rabi.Util.loadIndexFromDisk;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.commons.lang3.reflect.FieldUtils.getField;
 import static org.awaitility.Awaitility.await;
@@ -70,14 +72,17 @@ class FlushingTest {
     });
     LOG.info("Engine started now in testFlush");
 
+    // Let flusher and compactor start
+    Thread.currentThread().sleep(2000);
     final Field engineField = getField(testDB.getClass(), "engine", true);
     final EngineImpl engine = (EngineImpl) engineField.get(testDB);
     final Field immutableTablesField = getField(engine.getClass(), "immutableTables", true);
     final Field compactorField = getField(engine.getClass(), "compactor", true);
 
     /*
-    Stop these routines so that we just dont have flushing as well as compaction
+    Stop these routines so that we just don't have flushing as well as compaction
      */
+    LOG.info("trying to shut down compactor");
     final Thread compactor = (Thread) compactorField.get(engine);
     Util.doInterruptThread(compactor);
 
@@ -99,17 +104,17 @@ class FlushingTest {
     assertNotNull(immutable);
     final long immutableID = immutable.getId();
     // wait for flushing to complete
-    assertDoesNotThrow(() -> await().atMost(5, SECONDS).until(() ->
-        Util.getDiskArtifact(dataDir, immutableID, ".l2.data").size() == 1 &&
-            Util.getDiskArtifact(dataDir, immutableID, ".l2.index").size() == 1
+    assertDoesNotThrow(() -> await().atMost(10, SECONDS).until(() ->
+        Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.data").size() == 1 &&
+            Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.index").size() == 1
     ));
 
     /*
     Now read the index file and data file and create a memtable and compare with immutable.
 
      */
-    final Index l2Index = loadIndexFromDisk(Util.getDiskArtifact(dataDir, immutableID, ".l2.index").get(0));
-    final Data l2Data = loadDataFromDisk(Util.getDiskArtifact(dataDir, immutableID, ".l2.data").get(0));
+    final Index l2Index = loadIndexFromDisk(Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.index").get(0));
+    final Data l2Data = loadDataFromDisk(Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.data").get(0));
     final List<Pair<byte[], byte[]>> flushedRecords = loadKeyVals(l2Index, l2Data);
     final List<Pair<byte[], byte[]>> memtableRecords = immutable.export();
     flushedRecords.sort((a, b) -> UnsignedBytes.lexicographicalComparator().compare(a.getLeft(), b.getLeft()));
@@ -120,15 +125,6 @@ class FlushingTest {
     testDB.stop().get();
   }
 
-  private Index loadIndexFromDisk(final Path p) {
-    return new IndexImpl.IndexLoader(p).boot();
-  }
-
-  private Data loadDataFromDisk(final Path p) throws IOException {
-    final DataImpl data = (DataImpl) new DataImpl.DataBooter(p).boot();
-    data.loadValues();
-    return data;
-  }
 
   private List<Pair<byte[], byte[]>> loadKeyVals(final Index i, final Data d) throws IllegalAccessException {
     final DataImpl data = (DataImpl) d;
