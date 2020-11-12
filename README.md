@@ -5,9 +5,10 @@ A LSM based key value database in Java.
 # Project Status
 Implementation is going on.
 At the moment:
-- PUT is working.
+- PUT/DELETE is working.
 - Boot is working.
 - Flushing to disk is working.
+- Compaction is working
 
 # Building project
 This project uses maven for builds. 
