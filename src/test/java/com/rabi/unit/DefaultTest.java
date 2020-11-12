@@ -46,5 +46,7 @@ public class DefaultTest {
     // TODO(samdgupi) This is a stub right now as get is not implemented
     assertArrayEquals(value, testDB.get(validKey));
     assertArrayEquals(new byte[0], testDB.get(invalidKey));
+
+    testDB.stop();
   }
 }

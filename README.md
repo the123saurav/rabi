@@ -10,6 +10,22 @@ At the moment:
 - Flushing to disk is working.
 - Compaction is working
 
+# Usage
+```
+    final Path dataDir = Paths.get("/tmp/rabi");
+    byte[] validKey = "valid".getBytes();
+    byte[] value = "value".getBytes();
+
+    final DB testDB = DBFactory.getInstance(dataDir.toString(), testLogger);
+    final Config.ConfigBuilder configBuilder = new Config.ConfigBuilder();
+
+    final CompletableFuture<Void> isOpen = testDB.open(configBuilder.build());
+    isOpen.get(1, TimeUnit.SECONDS);
+
+    testDB.put(validKey, value);
+
+    testDB.stop()
+```
 # Building project
 This project uses maven for builds. 
 Requirements:
