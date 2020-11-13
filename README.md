@@ -1,4 +1,8 @@
 [![Build Status](https://travis-ci.com/the123saurav/rabi.svg?branch=master)](https://travis-ci.com/the123saurav/rabi)
+[![Code Grade](https://www.code-inspector.com/project/16197/status/svg)](https://frontend.code-inspector.com/public/project/16197/rabi/dashboard)
+[![Code Quality Score](https://www.code-inspector.com/project/16197/score/svg)](https://frontend.code-inspector.com/public/project/16197/rabi/dashboard)
+
+
 # rabi
 A LSM based key value database in Java.
 
