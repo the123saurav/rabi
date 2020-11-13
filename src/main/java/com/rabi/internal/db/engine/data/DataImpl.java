@@ -145,7 +145,7 @@ public class DataImpl implements Data {
     final FileChannel ch = FileChannel.open(path, StandardOpenOption.READ);
     final ByteBuffer loadBuffer = ByteBuffer.allocate(BUFFER_SIZE_BYTES);
     Record e;
-    loadBuffer.mark();
+    //loadBuffer.mark();
     long offset = 8;
     ch.position(8);
     while (ch.read(loadBuffer) > 0) {
@@ -155,12 +155,13 @@ public class DataImpl implements Data {
         e = Record.tryDeserialize(loadBuffer);
         if (e == null) {
           loadBuffer.reset();
+          loadBuffer.compact();
           break;
         }
         values.put(offset, e.getVal());
         offset += Record.getDiskSize(e.getKey(), e.getVal());
       }
-      loadBuffer.mark();
+      //loadBuffer.mark();
     }
     log.info("Loaded {} records to memory for data {}", values.size(), path);
   }

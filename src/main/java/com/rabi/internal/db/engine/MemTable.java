@@ -15,7 +15,7 @@ public interface MemTable extends Bootable<Void> {
 
   void delete(byte[] k) throws IOException;
 
-  void allowMutation();
+  int isBeingWritten();
 
   void disallowMutation();
 

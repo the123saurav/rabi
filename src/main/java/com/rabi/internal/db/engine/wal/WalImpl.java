@@ -57,6 +57,7 @@ public class WalImpl implements Wal {
         throw new InitialisationException(e);
       }
     }
+    log.info("Loaded WAL {} with {} records", id, records.size());
     return records;
   }
 

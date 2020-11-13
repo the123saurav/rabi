@@ -4,11 +4,9 @@ import com.rabi.Config;
 import com.rabi.DB;
 import com.rabi.exceptions.DBUinitializedException;
 import com.rabi.exceptions.ShutdownException;
-import com.rabi.exceptions.UnexpectedException;
 import com.rabi.internal.db.engine.EngineImpl;
 import org.slf4j.Logger;
 
-import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -65,9 +63,10 @@ public final class DBImpl implements DB {
    */
   @Override
   public synchronized CompletableFuture<Void> open(Config c) throws CloneNotSupportedException {
-    if (engine != null) {
+    if (engine != null && !engine.isShutdown()) {
       return CompletableFuture.completedFuture(null);
     }
+    instances.putIfAbsent(dataDir, this);
     final Config cfg = (Config) c.clone();
     engine = new EngineImpl(this.dataDir, cfg, this.log);
     return CompletableFuture.runAsync(engine::start);

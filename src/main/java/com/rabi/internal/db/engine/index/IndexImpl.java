@@ -116,7 +116,7 @@ public class IndexImpl implements Index {
     assert minKeyOffset >= 0;
     assert maxKeyOffset >= 0;
     totalKeys = h.getTotalKeys();
-    log.info("Index file at {} has {} keys, minOffset: {}", new Object[] {path, totalKeys, minKeyOffset});
+    log.info("Index file at {} has {} keys, minOffset: {}, maxOffset: {}", path, totalKeys, minKeyOffset, maxKeyOffset);
   }
 
   private void loadRecords(final FileChannel ch) throws IOException {
@@ -130,6 +130,7 @@ public class IndexImpl implements Index {
         e = Record.tryDeserialize(loadBuffer);
         if (e == null) {
           loadBuffer.reset();
+          loadBuffer.compact();
           break;
         }
         map.put(new ByteArrayWrapper(e.key), e.offset);
@@ -140,7 +141,7 @@ public class IndexImpl implements Index {
           maxKey = e.key;
         }
       }
-      loadBuffer.mark();
+      //loadBuffer.mark();
     }
     log.info("Loaded {} records to memory for index {}, minKey {}, maxKey {}", map.size(),
         path, new String(minKey, StandardCharsets.UTF_8), new String(maxKey, StandardCharsets.UTF_8));

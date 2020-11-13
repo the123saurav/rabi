@@ -5,6 +5,7 @@ import com.rabi.internal.db.engine.MemTable;
 import com.rabi.internal.db.engine.Wal;
 import com.rabi.internal.db.engine.wal.Record;
 import com.rabi.internal.types.ByteArrayWrapper;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
@@ -52,6 +53,7 @@ public class MemTableImpl implements MemTable {
   private final Wal wal;
   private final long id;
   private boolean mutable;
+  private final AtomicInteger isBeingWritten;
   private final Logger log;
   //TODO this is bad, replace with something else even we can sample memory usage
   // with costly call say after every 100 ops. Use HyperLogLog.
@@ -66,6 +68,7 @@ public class MemTableImpl implements MemTable {
     wal = w;
     log = logger;
     numOps = new AtomicLong();
+    isBeingWritten = new AtomicInteger();
   }
 
   public Void boot() {
@@ -119,10 +122,6 @@ public class MemTableImpl implements MemTable {
     return null;
   }
 
-  public void allowMutation() {
-    mutable = true;
-  }
-
   public void disallowMutation() {
     mutable = false;
   }
@@ -134,9 +133,15 @@ public class MemTableImpl implements MemTable {
 
   @Override
   public void put(final byte[] k, final byte[] v) throws IOException {
-    final long vtime = wal.appendPut(k, v);
-    final ByteArrayWrapper b = new ByteArrayWrapper(k);
-    put(b, v, vtime);
+    assert v != null;
+    isBeingWritten.incrementAndGet();
+    try {
+      final long vtime = wal.appendPut(k, v);
+      final ByteArrayWrapper b = new ByteArrayWrapper(k);
+      put(b, v, vtime);
+    } finally {
+      isBeingWritten.decrementAndGet();
+    }
   }
 
   @Override
@@ -149,9 +154,19 @@ public class MemTableImpl implements MemTable {
 
   @Override
   public void delete(final byte[] k) throws IOException {
-    final long vtime = wal.appendDelete(k);
-    final ByteArrayWrapper b = new ByteArrayWrapper(k);
-    put(b, null, vtime);
+    isBeingWritten.incrementAndGet();
+    try {
+      final long vtime = wal.appendDelete(k);
+      final ByteArrayWrapper b = new ByteArrayWrapper(k);
+      put(b, null, vtime);
+    } finally {
+      isBeingWritten.decrementAndGet();
+    }
+  }
+
+  @Override
+  public int isBeingWritten() {
+    return isBeingWritten.get();
   }
 
   // this is not lock free as it internally locks the section.

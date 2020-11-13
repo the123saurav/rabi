@@ -1,6 +1,6 @@
 package com.rabi.internal.db.engine.index;
 
-import java.nio.BufferOverflowException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -25,7 +25,7 @@ class Record {
   static Record tryDeserialize(final ByteBuffer b) {
     try {
       return deserialize(b);
-    } catch (BufferOverflowException ex) {
+    } catch (BufferUnderflowException ex) {
       return null;
     }
   }

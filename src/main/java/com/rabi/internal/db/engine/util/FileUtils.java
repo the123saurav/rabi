@@ -67,7 +67,7 @@ public class FileUtils {
                                     final String level) throws IOException {
     final Path p = Paths.get(dataDir.toString() + "/" + id + "." + level + ".data.tmp");
     log.debug("Data file path during flush would be: {}", p);
-    final Data d = new DataImpl(p, FileUtils.getId(p), 0);
+    final Data d = new DataImpl(p, FileUtils.getId(p), 8); // TODO: should we use 0 here?
     d.flush(recordSet, syncMode);
     log.info("Flushed datafile {} to {}", id, p);
     return d;

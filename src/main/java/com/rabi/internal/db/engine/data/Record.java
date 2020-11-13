@@ -1,6 +1,6 @@
 package com.rabi.internal.db.engine.data;
 
-import java.nio.BufferOverflowException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -54,7 +54,7 @@ final public class Record {
   static Record tryDeserialize(final ByteBuffer b) {
     try {
       return deserialize(b);
-    } catch (final BufferOverflowException ex) {
+    } catch (final BufferUnderflowException ex) {
       /*
         indicates we had a partial record in buffer and hence we need to read more.
        */

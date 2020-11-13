@@ -71,269 +71,6 @@ public class EngineImpl implements Engine {
   private Thread eventListener;
 
 
-  /*private static class FlusherToEngine extends Message {
-    private final Index index;
-
-    FlusherToEngine(Index i) {
-      index = i;
-    }
-
-    Index getIndex() {
-      return index;
-    }
-  }*/
-
-  /*private class EngineToFlusher extends Message {
-    private final MemTable m;
-
-    EngineToFlusher(MemTable m) {
-      this.m = m;
-    }
-
-    MemTable getMemTable() {
-      return m;
-    }
-
-    boolean getSyncMode() {
-      return cfg.getSync();
-    }
-
-    Path getDataDir() {
-      return dataDir;
-    }
-  }*/
-
-  /*private static class CompactorToEngine extends Message {
-  }
-
-  private static class EngineToCompactor extends Message {
-  }
-*/
-  /*private class Flusher implements Runnable {
-    private final Logger log = LoggerFactory.getLogger(Flusher.class);
-
-    @Override
-    public void run() {
-      log.info("Flusher started.");
-      EngineToFlusher msg;
-      while (true) {
-        try {
-          msg = toFlusher.take(); //block for task, checks interrupted flag and also responds to interrupted while sleeping and throws
-          log.info("Got request to flush memtable.");
-          // engine adds the index and removes immutable table.
-          final Index i = doFlush(msg.getMemTable(), msg.getDataDir(), msg.getSyncMode());
-          log.info("Flushed memtable to disk at: {}", i.getPath());
-          messageBus.add(new FlusherToEngine(i));
-        } catch (final InterruptedException e) {
-          log.info("Shutting down flusher...");
-          return;
-        }
-      }
-    }
-
-    //TODO: add expo backoff
-    private Index doFlush(final MemTable m, final Path dataDir, final boolean syncMode) throws InterruptedException {
-      while (true) {
-        try {
-          return flush(m, dataDir, syncMode);
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-      }
-    }
-
-    *//**
-   * - get exported entryset
-   * - create tmp data and index file
-   * - dump to above file in batches
-   * - create index file
-   * - rename .tmp
-   *//*
-    private Index flush(final MemTable m, final Path dataDir, final boolean syncMode) throws IOException {
-      final long id = m.getId();
-      final List<Pair<byte[], byte[]>> recordSet = m.export();
-      log.info("Flushing memtable: {} with {} records", id, m.size());
-      final Data d = flushDataFile(recordSet, dataDir, id, syncMode);
-      final Index i = flushIndexFile(recordSet, dataDir, id, syncMode);
-      d.rename(Paths.get(dataDir.toString() + "/" + id + ".l2.data"));
-      i.rename(Paths.get(dataDir.toString() + "/" + id + ".l2.index"));
-      log.info("Renamed data and index files after flush");
-      return i;
-    }
-
-    private Data flushDataFile(final List<Pair<byte[], byte[]>> recordSet,
-                               final Path dataDir, final long id, final boolean syncMode) throws IOException {
-      final Path p = Paths.get(dataDir.toString() + "/" + id + ".l2.data.tmp");
-      log.info("Data file path during flush would be: {}", p);
-      final Data d = new DataImpl(p, FileUtils.getId(p));
-      d.flush(recordSet, syncMode);
-      log.info("Flushed datafile {} to {}", id, p);
-      return d;
-    }
-
-    private Index flushIndexFile(final List<Pair<byte[], byte[]>> entries, Path dataDir, long id, boolean syncMode) throws IOException {
-      byte[] tmp = new byte[256];
-      Arrays.fill(tmp, (byte) 255);
-      ByteArrayWrapper minKey = new ByteArrayWrapper(tmp);
-      ByteArrayWrapper maxKey = new ByteArrayWrapper(new byte[] {(byte) 0});
-      long minKeyOffset = 0;
-      long maxKeyOffset = 0;
-      Map<ByteArrayWrapper, Long> m = new HashMap<>();
-      ByteArrayWrapper k;
-      long fileOffset = 0;
-      long currOffset;
-
-      for (final Pair<byte[], byte[]> e : entries) {
-        k = new ByteArrayWrapper(e.getLeft());
-        currOffset = 0;
-        if (e.getRight() != null) {
-          currOffset = fileOffset;
-          fileOffset += 1 + 2 + e.getLeft().length + e.getRight().length;
-          //minkey/maxkey is one of the keys in data file
-          if (k.compareTo(minKey) <= 0) {
-            minKey = k;
-            minKeyOffset = currOffset;
-          }
-          if (k.compareTo(maxKey) >= 0) {
-            maxKey = k;
-            maxKeyOffset = currOffset;
-          }
-        }
-        m.put(k, currOffset);
-      }
-      final Path indexPath = Paths.get(dataDir.toString() + "/" + id + ".l2.index.tmp");
-      log.info("Index file path upon flush would be: {}", indexPath);
-      final long indexId = FileUtils.getId(indexPath);
-      final Index i = IndexImpl.loadedIndex(indexPath, indexId, m, minKey.unwrap(),
-          minKeyOffset, maxKey.unwrap(), maxKeyOffset);
-      i.flush(syncMode);
-      return i;
-    }
-  }*/
-
-  /**
-   * The compactor would remove one L2index.
-   * It will also update the L3indexes which is okay as we are not changing
-   * any references.
-   * Note that serving reads from L3 target files is okay when compaction is running as
-   * the only keys that are updated in the index(we look into index for answering reads)
-   * are from L2 candidate's file and hence if any query comes for these, they would be answered by L2 file only and
-   * not come to L3.
-   * For any other key, the L3 index would be unaffected and so would be the data file where we are only appending,
-   * so all existing offsets, as seen in the L3 index, are valid.
-   */
-  /*private class Compactor implements Runnable {
-    private final Logger log = LoggerFactory.getLogger(Compactor.class);
-
-    @Override
-    public void run() {
-      log.info("Compactor started.");
-      while (true) {
-        try {
-          toCompactor.take(); //block for task
-          log.info("Got request to compact");
-          // engine adds the index and removes immutable table.
-          int n = compact();
-          log.info("Done compacting {} files", n);
-          messageBus.add(new CompactorToEngine());
-        } catch (final InterruptedException e) {
-          log.info("Shutting down compactor...");
-          return;
-        } catch (IOException e) {
-          throw new RuntimeException("Error in compaction", e);
-        }
-      }
-    }
-
-    private int compact() throws IOException {
-      int n = 0;
-      while (l2Indexes.size() > cfg.getMaxFlushedFiles()) {
-        if (l3Indexes.size() == 0) {
-          log.info("No file in L3, using simple compaction strategy.");
-          final Pair<Data, Index> candidatePair = getHighestDensityL2File();
-          final Index candidateIndex = candidatePair.getRight();
-          final Data candidateData = candidatePair.getLeft();
-          String currPath = candidateIndex.getPath().toString();
-          int l = currPath.lastIndexOf('/');
-          String head = currPath.substring(0, l) + "/";
-          String tail = currPath.substring(l + 1);
-          String newPath = head + tail.replace(".l2.", ".l3.");
-          try {
-            candidateIndex.lockAndSignal();
-            candidateIndex.rename(Paths.get(newPath));
-            currPath = candidateData.getPath().toString();
-            l = currPath.lastIndexOf('/');
-            head = currPath.substring(0, l) + "/";
-            tail = currPath.substring(l + 1);
-            newPath = head + tail.replace(".l2.", ".l3.");
-            candidateData.rename(Paths.get(newPath));
-            l3Indexes.put(candidateIndex.getId(), candidateIndex);
-            l3Data.put(candidateData.getID(), candidateData);
-            l2Indexes.remove(candidateIndex.getId());
-            l2Data.remove(candidateData.getID());
-            n++;
-          } finally {
-            candidateIndex.unlockAndSignal();
-          }
-        } else {
-          log.info("Using regular compaction strategy");
-          // TODO
-        }
-      }
-      return n;
-    }
-
-    private Pair<Data, Index> getHighestDensityL2File() {
-      double maxDensity = Double.MIN_VALUE;
-      Index maxDensityIndex = null;
-
-      for (final Index i : l2Indexes.values()) {
-        if (i.getDensity() > maxDensity) {
-          maxDensity = i.getDensity();
-          maxDensityIndex = i;
-        }
-      }
-      final Data maxDensityData = l2Data.get(maxDensityIndex.getId());
-      return new ImmutablePair<>(maxDensityData, maxDensityIndex);
-    }
-  }*/
-
-
-  /*private class MessageListener implements Runnable {
-
-    @Override
-    public void run() {
-      log.info("Starting engine MessageListener...");
-      while (true) {
-        Message m;
-        try {
-          m = messageBus.take();
-        } catch (final InterruptedException e) {
-          log.warn("EventListener interrupted, exiting...");
-          return;
-        }
-        if (m instanceof FlusherToEngine) {
-          try {
-            handleFlusherMessage((FlusherToEngine) m);
-            if (l2Indexes.size() > cfg.getMaxFlushedFiles()) {
-              toCompactor.add(new EngineToCompactor());
-            }
-          } catch (IOException e) {
-            throw new RuntimeException(e);
-          }
-        }
-      }
-    }
-
-    private void handleFlusherMessage(final FlusherToEngine e) throws IOException {
-      log.info("received message from Flusher: {}", e.getIndex());
-      l2Indexes.put(e.getIndex().getId(), e.getIndex());
-      final MemTable m = immutableTables.getLast();
-      immutableTables.removeLast();
-      log.info("removing wal for flushed memtable");
-      m.cleanup();
-    }
-  }*/
   public EngineImpl(String dDir, Config cfg, Logger logger) {
     this.dataDir = Paths.get(dDir);
     this.cfg = cfg;
@@ -443,6 +180,7 @@ public class EngineImpl implements Engine {
             throw new InitialisationException(e);
           }
         });
+        log.info("Processed all boot tasks...");
       }
     }
 
@@ -528,10 +266,11 @@ public class EngineImpl implements Engine {
     mutableTable.put(k, v);
     if (mutableTable.size() > maxKeys && mutLock.tryLock()) {
       if (mutableTable.size() > maxKeys) { //DCL
+        final MemTable oldTable = mutableTable;
         log.info("memtable full with {} entries, rotating.", mutableTable.size());
         final MemTable newTable = newTable(Instant.now().toEpochMilli());
         newTable.boot(); //creates segments
-        immutableTables.add(mutableTable);
+        immutableTables.add(oldTable);
         mutableTable = newTable;
         log.info("Signalling flusher...");
         toFlusher.add(new EngineToFlusher(immutableTables.getLast()));
@@ -605,6 +344,11 @@ public class EngineImpl implements Engine {
     eventListener.interrupt();
     //}
     state = State.TERMINATED;
+  }
+
+  @Override
+  public boolean isShutdown() {
+    return state == State.TERMINATED || state == State.TERMINATING;
   }
 
   private List<BaseTask> getBootTasks(final Map<FileType, List<Path>> m) {
@@ -758,7 +502,11 @@ public class EngineImpl implements Engine {
       while (true) {
         try {
           msg = toFlusher.take(); //block for task
-          log.info("Got request to flush memtable.");
+          log.info("Got request to flush memtable {} with {} ops", msg.getMemTable().getId(), msg.getMemTable().size());
+          while (msg.getMemTable().isBeingWritten() > 0) {
+            log.warn("Memtable to be flushed is still being written, sleeping 500ms");
+            Thread.currentThread().sleep(100);
+          }
           // engine adds the index and removes immutable table.
           final Pair<Data, Index> pair = doFlush(msg.getMemTable(), cfg.getSync());
           final Data flushedData = pair.getLeft();
@@ -918,7 +666,7 @@ public class EngineImpl implements Engine {
                 }
               }
               if (orphan) {
-                log.info("Key: {} is orphan", new String(b.unwrap()));
+                log.debug("Key: {} is orphan", new String(b.unwrap()));
                 orphanCount++;
                 if (currStreak == null) {
                   currStreak = new OrphanedKeysStreak(in);
@@ -968,7 +716,7 @@ public class EngineImpl implements Engine {
               byte[] k;
               for (int i = mergeOks.getKeyOffset(); i < mergeOks.getKeyOffset() + mergeOks.getStreak(); i++) {
                 k = indexKeys.get(i).unwrap();
-                log.info("Trying to assign target for orphan {}", new String(k));
+                log.debug("Trying to assign target for orphan {}", new String(k));
                 long min = Long.MAX_VALUE;
                 Index tIndex = null;
                 // try to find a target for this key
@@ -980,7 +728,7 @@ public class EngineImpl implements Engine {
                     tIndex = index;
                   }
                 }
-                log.info("For key {},target index is {}", new String(k), tIndex.getId());
+                log.debug("For key {},target index is {}", new String(k), tIndex.getId());
                 assignToTarget(k, candidateIndex, candidateData, tIndex, toFlushRecords, targetDataOffsets);
               }
             }
@@ -989,15 +737,15 @@ public class EngineImpl implements Engine {
           // start appending to data files of target
           for (Map.Entry<Long, List<Pair<byte[], byte[]>>> entry : toFlushRecords.entrySet()) {
             log.info("For target {}, entries to be flushed are: ", entry.getKey());
-            entry.getValue().forEach(e -> log.info("{}", new String(e.getKey())));
+            entry.getValue().forEach(e -> log.debug("{}", new String(e.getKey())));
             final Data d = l3Data.get(entry.getKey());
             d.flush(entry.getValue(), cfg.getSync());
             d.offloadValues();
 
             //flush index
             final Index oldIndex = l3Indexes.get(entry.getKey());
-            log.info("Logging keys of l3 oldIndex:{}", oldIndex.getId());
-            oldIndex.getKeys().forEach(k -> log.info("{}", new String(k.unwrap())));
+            log.debug("Logging keys of l3 oldIndex:{}", oldIndex.getId());
+            oldIndex.getKeys().forEach(k -> log.debug("{}", new String(k.unwrap())));
             byte[] minKey = oldIndex.getMinKey();
             byte[] maxKey = oldIndex.getMaxKey();
             long minKeyOffset = oldIndex.getMinKeyOffset();
@@ -1053,7 +801,7 @@ public class EngineImpl implements Engine {
         targetDataOffsets.put(targetIndexID, offset + Record.getDiskSize(k,
             candidateData.getValueForOffset(candidateIndex.get(k))));
         targetIndex.put(k, offset);
-        log.info("Assigned key {} to offset {} of index {}", new String(k), offset, targetIndexID);
+        log.debug("Assigned key {} to offset {} of index {}", new String(k), offset, targetIndexID);
         toFlushRecords.computeIfAbsent(targetIndexID, f -> new ArrayList<>()).
             add(ImmutablePair.of(k, candidateData.getValueForOffset(candidateIndex.get(k))));
         //}
