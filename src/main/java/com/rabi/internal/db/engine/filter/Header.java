@@ -1,6 +1,6 @@
 package com.rabi.internal.db.engine.filter;
 
-import java.nio.BufferOverflowException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -50,7 +50,7 @@ public class Header {
   public static Header tryDeserialize(ByteBuffer b) {
     try {
       return deserialize(b);
-    } catch (BufferOverflowException ex) {
+    } catch (BufferUnderflowException ex) {
       return null;
     }
   }

@@ -47,29 +47,26 @@ public class Segment {
     //read records from disk resident segment file if it exists
     if (Files.exists(path)) {
       try (final FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
-
         final ByteBuffer loadBuffer = ByteBuffer.allocateDirect(LOAD_SIZE_BYTES);
         Record e;
-        long lastPos;
         long numRead;
         long totalRead = 0;
 
         while ((numRead = ch.read(loadBuffer)) > 0) {
           totalRead += numRead;
-          lastPos = loadBuffer.position();
           LOG.debug(String.format("last position: %d, totalRead: %d", loadBuffer.position(), totalRead));
-          loadBuffer.rewind(); //always read from start of buffer
-          while (loadBuffer.position() < lastPos) {
+          loadBuffer.flip();
+          while (loadBuffer.hasRemaining()) {
             loadBuffer.mark();
             e = Record.tryDeserialize(loadBuffer);
             if (e == null) {
               loadBuffer.reset();
+              loadBuffer.compact();
               LOG.debug(path.getFileName() + " - buffer underflow, position is: " + loadBuffer.position() + " reading more data");
               break;
             }
             records.add(e); //can we optimise this by adding in batches??
           }
-          loadBuffer.compact();
         }
       }
     }
