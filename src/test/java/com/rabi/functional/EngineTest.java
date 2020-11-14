@@ -114,13 +114,16 @@ class EngineTest {
     final Field flusherField = getField(engine.getClass(), "flusher", true);
     final Field compactorField = getField(engine.getClass(), "compactor", true);
     final Field eventListenerField = getField(engine.getClass(), "eventListener", true);
-
-    /*
-    Stop these routines so that we just dont have flushing as well as compaction
-     */
     final Thread flusher = (Thread) flusherField.get(engine);
     final Thread compactor = (Thread) compactorField.get(engine);
     final Thread eventListener = (Thread) eventListenerField.get(engine);
+
+    while (!eventListener.isAlive() || !flusher.isAlive() || !compactor.isAlive()) {
+      Thread.currentThread().sleep(100);
+    }
+    /*
+    Stop these routines so that we just dont have flushing as well as compaction
+     */
     Util.doInterruptThread(eventListener);
     Util.doInterruptThread(compactor);
     Util.doInterruptThread(flusher);
