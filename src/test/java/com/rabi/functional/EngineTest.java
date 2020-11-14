@@ -119,7 +119,7 @@ class EngineTest {
     final Thread eventListener = (Thread) eventListenerField.get(engine);
 
     while (!eventListener.isAlive() || !flusher.isAlive() || !compactor.isAlive()) {
-      Thread.currentThread().sleep(100);
+      Thread.currentThread().sleep(500);
     }
     /*
     Stop these routines so that we just dont have flushing as well as compaction
