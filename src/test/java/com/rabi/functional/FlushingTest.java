@@ -73,17 +73,21 @@ class FlushingTest {
     LOG.info("Engine started now in testFlush");
 
     // Let flusher and compactor start
-    Thread.currentThread().sleep(2000);
     final Field engineField = getField(testDB.getClass(), "engine", true);
     final EngineImpl engine = (EngineImpl) engineField.get(testDB);
-    final Field immutableTablesField = getField(engine.getClass(), "immutableTables", true);
     final Field compactorField = getField(engine.getClass(), "compactor", true);
+    final Thread compactor = (Thread) compactorField.get(engine);
+    final Field flusherField = getField(engine.getClass(), "flusher", true);
+    final Thread flusher = (Thread) flusherField.get(engine);
+    final Field immutableTablesField = getField(engine.getClass(), "immutableTables", true);
+    while (!flusher.isAlive() || !compactor.isAlive()) {
+      Thread.sleep(100);
+    }
 
     /*
-    Stop these routines so that we just don't have flushing as well as compaction
+    Stop these routines so that we just don't have compaction.
      */
     LOG.info("trying to shut down compactor");
-    final Thread compactor = (Thread) compactorField.get(engine);
     Util.doInterruptThread(compactor);
 
     final ConcurrentLinkedDeque<MemTable> immutables = (ConcurrentLinkedDeque<MemTable>) immutableTablesField.get(engine);
@@ -94,6 +98,7 @@ class FlushingTest {
       try {
         testDB.put(key, val);
         if (immutables.size() > 0) {
+          // we store here as after loop flushing might have already removed it.
           immutable = immutables.getLast();
         }
       } catch (IOException e) {
@@ -106,12 +111,13 @@ class FlushingTest {
     // wait for flushing to complete
     assertDoesNotThrow(() -> await().atMost(10, SECONDS).until(() ->
         Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.data").size() == 1 &&
-            Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.index").size() == 1
+            Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.index").size() == 1 &&
+            immutables.peekLast() == null
     ));
+
 
     /*
     Now read the index file and data file and create a memtable and compare with immutable.
-
      */
     final Index l2Index = loadIndexFromDisk(Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.index").get(0));
     final Data l2Data = loadDataFromDisk(Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.data").get(0));

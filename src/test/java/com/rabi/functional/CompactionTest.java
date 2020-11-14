@@ -5,7 +5,6 @@ import static org.apache.commons.lang3.reflect.FieldUtils.getField;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 import com.rabi.Config;
