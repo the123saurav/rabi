@@ -7,6 +7,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.rabi.Config;
 import com.rabi.exceptions.InitialisationException;
 import com.rabi.exceptions.InvalidDBStateException;
+import com.rabi.exceptions.UnexpectedException;
 import com.rabi.exceptions.WritesStalledException;
 import com.rabi.internal.db.Engine;
 import com.rabi.internal.db.engine.data.DataImpl;
@@ -273,7 +274,7 @@ public class EngineImpl implements Engine {
         immutableTables.add(oldTable);
         mutableTable = newTable;
         log.info("Signalling flusher...");
-        toFlusher.add(new EngineToFlusher(immutableTables.getLast()));
+        toFlusher.add(new EngineToFlusher(immutableTables.getFirst()));
         mutLock.unlock();
       }
     }
@@ -480,19 +481,19 @@ public class EngineImpl implements Engine {
   public static class EngineToCompactor extends Message {
   }
 
-  private class EngineToFlusher extends Message {
+  public class EngineToFlusher extends Message {
     private final MemTable m;
 
     EngineToFlusher(MemTable m) {
       this.m = m;
     }
 
-    MemTable getMemTable() {
+    public MemTable getMemTable() {
       return m;
     }
   }
 
-  private class Flusher implements Runnable {
+  public class Flusher implements Runnable {
     private final Logger log = LoggerFactory.getLogger(Flusher.class);
 
     @Override
@@ -912,9 +913,12 @@ public class EngineImpl implements Engine {
 
     private void handleFlusherMessage(final FlusherToEngine e) throws IOException {
       log.info("received message from Flusher: {}", e.getIndex());
+      final MemTable m = immutableTables.getFirst();
+      if (e.index.getId() != m.getId()) {
+        throw new UnexpectedException("immutable tables list tampered");
+      }
       l2Indexes.put(e.getIndex().getId(), e.getIndex());
       l2Data.put(e.getData().getID(), e.getData());
-      final MemTable m = immutableTables.getLast();
       immutableTables.removeLast();
       log.info("removing wal for flushed memtable");
       m.cleanup();

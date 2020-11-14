@@ -29,15 +29,14 @@ public final class Util {
     return sb.toString();
   }
 
-  public static void doInterruptThread(final Thread t) {
-    if (!t.isAlive()) {
-      try {
-        Thread.currentThread().sleep(2000);
-      } catch (final InterruptedException e) {
-        e.printStackTrace();
-      }
+  public static void doInterruptThread(final Thread t) throws InterruptedException {
+    while (!t.isAlive()) {
+      Thread.currentThread().sleep(100);
     }
-    t.interrupt();
+    while (t.isAlive()) {
+      t.interrupt();
+      Thread.sleep(100);
+    }
   }
 
   public static List<Path> getDiskArtifact(final Path dir, final String... subStrings) throws IOException {

@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutionException;
@@ -81,7 +82,7 @@ class FlushingTest {
     final Thread flusher = (Thread) flusherField.get(engine);
     final Field immutableTablesField = getField(engine.getClass(), "immutableTables", true);
     while (!flusher.isAlive() || !compactor.isAlive()) {
-      Thread.sleep(100);
+      Thread.sleep(500);
     }
 
     /*
@@ -89,25 +90,34 @@ class FlushingTest {
      */
     LOG.info("trying to shut down compactor");
     Util.doInterruptThread(compactor);
+    Util.doInterruptThread(flusher);
 
     final ConcurrentLinkedDeque<MemTable> immutables = (ConcurrentLinkedDeque<MemTable>) immutableTablesField.get(engine);
-    MemTable immutable = null;
     final byte[] val = "the123saurav".getBytes();
     for (int i = 0; i < 1010; ++i) { // enough to create 1 immutable table
       final byte[] key = Util.getAlphaNumericString(30).getBytes();
       try {
         testDB.put(key, val);
-        if (immutables.size() > 0) {
-          // we store here as after loop flushing might have already removed it.
-          immutable = immutables.getLast();
-        }
       } catch (IOException e) {
         e.printStackTrace();
       }
     }
+    LOG.info("Done putting to DB");
 
+    final Field toFlusherField = getField(engine.getClass(), "toFlusher", true);
+    final BlockingQueue<EngineImpl.EngineToFlusher> toFlusher = (BlockingQueue<EngineImpl.EngineToFlusher>)
+        toFlusherField.get(engine);
+    EngineImpl.EngineToFlusher flushMessage = toFlusher.peek();
+    assertNotNull(flushMessage);
+    final MemTable immutable = flushMessage.getMemTable();
     assertNotNull(immutable);
     final long immutableID = immutable.getId();
+
+    // restart flusher
+    final Thread flusher2 = new Thread(engine.new Flusher());
+    flusherField.set(engine, flusher2);
+    flusher2.start();
+
     // wait for flushing to complete
     assertDoesNotThrow(() -> await().atMost(10, SECONDS).until(() ->
         Util.getDiskArtifact(dataDir, Long.toString(immutableID), ".l2.data").size() == 1 &&
