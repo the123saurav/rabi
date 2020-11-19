@@ -5,7 +5,9 @@
 
 
 # rabi
-A LSM based key value database in Java.
+A LSM based key value database in Java.  
+It is based on the [paper](https://www.computer.org/csdl/proceedings-article/cloud/2018/723501a652/13xI8B2zWrJ).
+This DB is a good fit for cases where keys can fit in memory.
 
 # Project Status
 Implementation is going on.
@@ -36,10 +38,6 @@ This project uses maven for builds.
 Requirements:
 - maven CLI(tested with 3.6.2)
 - Java 8
-
-# Code Coverage
-Run mvn test
-Then go to target/site/jacoco/index.html
 
 # Style Convention
 We follow [google style guide](https://google.github.io/styleguide/javaguide.html). The corresponding checksyles config
